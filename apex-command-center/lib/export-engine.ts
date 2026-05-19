@@ -8,7 +8,7 @@
 
 import { v4 as uuid } from 'uuid';
 import Storage from '@/storage/storage';
-import type { ExportFormat, ExportType, Tenant, FleetEntity, AIMetric, APIUsageLog } from '@/types';
+import type { ExportFormat, ExportType, Tenant, FleetEntity, AIMetric, APIUsageLog, OperationalMetric } from '@/types';
 
 // ============================================================
 // EXPORT JOB MANAGEMENT
@@ -171,9 +171,9 @@ export async function exportExecutiveReport(tenantId?: string): Promise<string> 
     const aiMetrics = await Storage.AIMetrics.getByTimeRange(Date.now() - 7 * 86400000, Date.now());
     const apiLogs = await Storage.APIUsage.getByTimeRange(Date.now() - 7 * 86400000, Date.now());
 
-    const totalApiCost = apiLogs.reduce((a, l) => a + l.cost, 0);
-    const totalAiCost = aiMetrics.reduce((a, m) => a + m.cost, 0);
-    const localAI = aiMetrics.filter((m) => m.inferenceSource === 'local').length;
+    const totalApiCost = apiLogs.reduce((a: number, l: APIUsageLog) => a + l.cost, 0);
+    const totalAiCost = aiMetrics.reduce((a: number, m: AIMetric) => a + m.cost, 0);
+    const localAI = aiMetrics.filter((m: AIMetric) => m.inferenceSource === 'local').length;
 
     const sections = [
       {
@@ -183,17 +183,17 @@ export async function exportExecutiveReport(tenantId?: string): Promise<string> 
       {
         heading: 'Tenant Overview',
         headers: ['Name', 'Region', 'Status', 'Plan', 'Vehicles', 'Drivers'],
-        rows: tenants.map((t) => [t.name, t.region, t.status, t.plan, String(t.vehicleCount), String(t.driverCount)]),
+        rows: tenants.map((t: Tenant) => [t.name, t.region, t.status, t.plan, String(t.vehicleCount), String(t.driverCount)]),
       },
       {
         heading: 'Fleet Summary',
         headers: ['Fleet', 'Region', 'Status', 'Vehicles', 'Uptime %', 'Version'],
-        rows: fleets.map((f) => [f.name, f.region, f.status, String(f.vehicleCount), `${f.uptimePercent}%`, f.version]),
+        rows: fleets.map((f: FleetEntity) => [f.name, f.region, f.status, String(f.vehicleCount), `${f.uptimePercent}%`, f.version]),
       },
       {
         heading: 'AI Performance (7 Days)',
         headers: ['Provider', 'Source', 'Tokens', 'Latency (ms)', 'Cost ($)', 'Cache Hit'],
-        rows: aiMetrics.slice(0, 50).map((m) => [m.provider, m.inferenceSource, String(m.tokensUsed), String(m.latencyMs), m.cost.toFixed(4), m.cacheHit ? 'Yes' : 'No']),
+        rows: aiMetrics.slice(0, 50).map((m: AIMetric) => [m.provider, m.inferenceSource, String(m.tokensUsed), String(m.latencyMs), m.cost.toFixed(4), m.cacheHit ? 'Yes' : 'No']),
       },
     ];
 
@@ -224,7 +224,7 @@ export async function exportCSV(type: ExportType, tenantId?: string): Promise<st
       const logs = tenantId
         ? await Storage.APIUsage.getByTenant(tenantId)
         : await Storage.APIUsage.getByTimeRange(Date.now() - 30 * 86400000, Date.now());
-      rows = logs.map((l) => ({
+      rows = (logs as APIUsageLog[]).map((l: APIUsageLog) => ({
         service: l.service,
         endpoint: l.endpoint,
         calls: l.calls,
@@ -238,7 +238,7 @@ export async function exportCSV(type: ExportType, tenantId?: string): Promise<st
       const fleets = tenantId
         ? await Storage.Fleets.getByTenant(tenantId)
         : await Storage.Fleets.getAll();
-      rows = fleets.map((f) => ({
+      rows = (fleets as FleetEntity[]).map((f: FleetEntity) => ({
         fleet: f.name,
         region: f.region,
         status: f.status,
@@ -252,7 +252,7 @@ export async function exportCSV(type: ExportType, tenantId?: string): Promise<st
       const metrics = tenantId
         ? await Storage.AIMetrics.getByTenant(tenantId)
         : await Storage.AIMetrics.getByTimeRange(Date.now() - 30 * 86400000, Date.now());
-      rows = metrics.map((m) => ({
+      rows = (metrics as AIMetric[]).map((m: AIMetric) => ({
         provider: m.provider,
         model: m.model,
         source: m.inferenceSource,
@@ -268,7 +268,7 @@ export async function exportCSV(type: ExportType, tenantId?: string): Promise<st
       const ops = tenantId
         ? await Storage.Operations.getByTenant(tenantId)
         : await Storage.Operations.getByTimeRange(Date.now() - 30 * 86400000, Date.now());
-      rows = ops.map((o) => ({
+      rows = (ops as OperationalMetric[]).map((o: OperationalMetric) => ({
         fleet_id: o.fleetId,
         period: o.period,
         efficiency: o.efficiency,
@@ -311,17 +311,17 @@ export async function exportTenantReport(tenantId: string): Promise<string> {
       {
         heading: 'Fleet Entities',
         headers: ['Fleet', 'Status', 'Vehicles', 'Uptime', 'Version'],
-        rows: fleets.map((f) => [f.name, f.status, String(f.vehicleCount), `${f.uptimePercent}%`, f.version]),
+        rows: fleets.map((f: FleetEntity) => [f.name, f.status, String(f.vehicleCount), `${f.uptimePercent}%`, f.version]),
       },
       {
         heading: 'AI Usage Summary',
         headers: ['Provider', 'Source', 'Tokens', 'Cost', 'Cache Hit'],
-        rows: aiMetrics.slice(0, 30).map((m) => [m.provider, m.inferenceSource, String(m.tokensUsed), `$${m.cost.toFixed(4)}`, m.cacheHit ? 'Yes' : 'No']),
+        rows: aiMetrics.slice(0, 30).map((m: AIMetric) => [m.provider, m.inferenceSource, String(m.tokensUsed), `$${m.cost.toFixed(4)}`, m.cacheHit ? 'Yes' : 'No']),
       },
       {
         heading: 'API Usage',
         headers: ['Service', 'Calls', 'Cost', 'Latency ms'],
-        rows: apiLogs.slice(0, 30).map((l) => [l.service, String(l.calls), `$${l.cost.toFixed(2)}`, String(l.latencyAvgMs)]),
+        rows: apiLogs.slice(0, 30).map((l: APIUsageLog) => [l.service, String(l.calls), `$${l.cost.toFixed(2)}`, String(l.latencyAvgMs)]),
       },
     ];
 

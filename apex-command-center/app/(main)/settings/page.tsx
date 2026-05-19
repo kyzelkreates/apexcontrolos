@@ -31,7 +31,7 @@ export default function SettingsPage() {
     setClearing(false);
   };
 
-  const storeEntries = health ? Object.entries(health.stores) : [];
+  const storeEntries = health ? (Object.entries(health.stores) as Array<[string, { ok: boolean; count: number; error?: string }]>) : [];
   const totalRecords = storeEntries.reduce((a, [, v]) => a + (v.ok ? v.count : 0), 0);
 
   return (
@@ -101,7 +101,7 @@ export default function SettingsPage() {
                 min={field.min}
                 max={field.max}
                 value={(config as Record<string, unknown>)[field.key] as number}
-                onChange={(e) => setConfig((c) => ({ ...c, [field.key]: parseInt(e.target.value) }))}
+                onChange={(e) => setConfig((c: typeof config) => ({ ...c, [field.key]: parseInt(e.target.value) }))}
                 className="w-32 rounded-lg border border-apex-border bg-apex-surface px-3 py-1.5 text-sm font-mono text-apex-text focus:outline-none focus:border-apex-accent/60 text-right"
               />
             </div>
@@ -114,7 +114,7 @@ export default function SettingsPage() {
             <div key={field.key} className="flex items-center justify-between">
               <label className="text-sm text-apex-textDim">{field.label}</label>
               <button
-                onClick={() => setConfig((c) => ({ ...c, [field.key]: !(c as Record<string, unknown>)[field.key] }))}
+                onClick={() => setConfig((c: ReturnType<typeof Storage.Config.get>) => ({ ...c, [field.key]: !(c as Record<string, unknown>)[field.key] }))}
                 className={cn(
                   'w-10 h-5 rounded-full transition-colors relative flex-shrink-0',
                   (config as Record<string, unknown>)[field.key] ? 'bg-apex-success' : 'bg-apex-border'

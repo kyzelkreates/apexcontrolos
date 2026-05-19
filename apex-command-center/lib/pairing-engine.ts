@@ -141,7 +141,7 @@ export async function completePairing(
   // Create isolated Tenant
   const slug = details.companyName.toLowerCase().replace(/[^a-z0-9]/g, '-');
   const existingTenants = await Storage.Tenants.getAll();
-  const slugExists = existingTenants.some((t) => t.slug === slug);
+  const slugExists = (existingTenants as Tenant[]).some((t: Tenant) => t.slug === slug);
   const finalSlug = slugExists ? `${slug}-${uuid().substring(0, 4)}` : slug;
 
   const pairingToken = uuid();

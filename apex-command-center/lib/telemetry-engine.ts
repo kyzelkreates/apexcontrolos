@@ -210,13 +210,13 @@ export async function reconcileOfflineQueue(tenantId: string): Promise<{
   snapshotId: string;
 }> {
   const unprocessed = await Storage.Telemetry.getUnprocessed(500);
-  const tenantUnprocessed = unprocessed.filter((e) => e.tenantId === tenantId);
+  const tenantUnprocessed = (unprocessed as TelemetryEvent[]).filter((e: TelemetryEvent) => e.tenantId === tenantId);
 
   if (tenantUnprocessed.length === 0) {
     return { reconciled: 0, snapshotId: '' };
   }
 
-  await Storage.Telemetry.markProcessed(tenantUnprocessed.map((e) => e.id));
+  await Storage.Telemetry.markProcessed(tenantUnprocessed.map((e: TelemetryEvent) => e.id));
 
   const snapshotId = `snap_${uuid()}`;
   await Storage.Sync.save({
@@ -228,7 +228,7 @@ export async function reconcileOfflineQueue(tenantId: string): Promise<{
     },
     deltaHash: `delta_${Date.now().toString(16)}`,
     reconciled: true,
-    size: tenantUnprocessed.reduce((acc, e) => acc + (e.size || 0), 0),
+    size: tenantUnprocessed.reduce((acc: number, e: TelemetryEvent) => acc + (e.size || 0), 0),
   });
 
   return { reconciled: tenantUnprocessed.length, snapshotId };
