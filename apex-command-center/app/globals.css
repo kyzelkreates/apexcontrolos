@@ -1,0 +1,89 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --apex-bg: #050810;
+  --apex-surface: #0b0f1a;
+  --apex-card: #0f1521;
+  --apex-border: #1a2235;
+  --apex-accent: #0ea5e9;
+}
+
+* { box-sizing: border-box; }
+
+html {
+  background-color: var(--apex-bg);
+  color: #e2e8f0;
+  font-family: 'Inter', system-ui, sans-serif;
+  font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  background-color: var(--apex-bg);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* Scrollbars */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: var(--apex-surface); }
+::-webkit-scrollbar-thumb { background: #243050; border-radius: 10px; }
+::-webkit-scrollbar-thumb:hover { background: #0ea5e9; }
+
+/* Focus */
+*:focus-visible {
+  outline: 2px solid #0ea5e9;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Selection */
+::selection { background: rgba(14,165,233,0.25); color: #e2e8f0; }
+
+/* Mono font class */
+.font-mono { font-family: 'JetBrains Mono', 'Fira Code', monospace; }
+
+/* Apex gradients */
+.apex-gradient-text {
+  background: linear-gradient(135deg, #0ea5e9, #8b5cf6);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.apex-card {
+  background: var(--apex-card);
+  border: 1px solid var(--apex-border);
+  border-radius: 0.75rem;
+}
+
+/* Chart tooltips */
+.recharts-tooltip-wrapper .recharts-default-tooltip {
+  background: #0f1521 !important;
+  border: 1px solid #1a2235 !important;
+  border-radius: 8px !important;
+  color: #e2e8f0 !important;
+}
+
+/* Animation helpers */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in { animation: fadeIn 0.25s ease-out; }
+
+@keyframes shimmer {
+  from { background-position: -200px 0; }
+  to { background-position: calc(200px + 100%) 0; }
+}
+
+.skeleton {
+  background: linear-gradient(90deg, #0f1521 25%, #1a2235 50%, #0f1521 75%);
+  background-size: 200px 100%;
+  animation: shimmer 1.5s infinite;
+}
