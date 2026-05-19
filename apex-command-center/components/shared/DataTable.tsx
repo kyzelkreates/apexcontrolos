@@ -3,7 +3,8 @@ import React, { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { ChevronUp, ChevronDown, Search } from 'lucide-react';
 
-interface Column<T> {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export interface Column<T = any> {
   key: string;
   header: string;
   render?: (row: T) => React.ReactNode;
@@ -11,7 +12,8 @@ interface Column<T> {
   width?: string;
 }
 
-interface DataTableProps<T> {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+interface DataTableProps<T = any> {
   columns: Column<T>[];
   data: T[];
   keyField: keyof T;
@@ -25,7 +27,8 @@ interface DataTableProps<T> {
   pageSize?: number;
 }
 
-export function DataTable<T extends Record<string, unknown>>({
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function DataTable<T extends Record<string, any>>({
   columns,
   data,
   keyField,
@@ -66,12 +69,8 @@ export function DataTable<T extends Record<string, unknown>>({
   const paged = sorted.slice((page - 1) * pageSize, page * pageSize);
 
   const handleSort = (key: string) => {
-    if (sortKey === key) {
-      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
-    } else {
-      setSortKey(key);
-      setSortDir('asc');
-    }
+    if (sortKey === key) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    else { setSortKey(key); setSortDir('asc'); }
   };
 
   return (
