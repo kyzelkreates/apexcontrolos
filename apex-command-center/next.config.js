@@ -1,9 +1,11 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  swcMinify: true,
   images: {
-    domains: ['openstreetmap.org', 'tile.openstreetmap.org'],
+    remotePatterns: [
+      { protocol: 'https', hostname: 'openstreetmap.org' },
+      { protocol: 'https', hostname: 'tile.openstreetmap.org' },
+    ],
   },
   webpack: (config) => {
     config.resolve.fallback = {
