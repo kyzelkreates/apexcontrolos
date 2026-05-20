@@ -12,7 +12,7 @@
  *  - Pairing engine            → registers new tenants + fleets
  */
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useCallback } from 'react';
 import Storage from '@/storage/storage';
 import { useApexStore } from '@/store/apex-store';
 import { startEngine, subscribeTelemetry } from '@/lib/telemetry-engine';
@@ -67,7 +67,12 @@ export function useApexData() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [
+    setTenants, setFleets, setTelemetryEvents, setAIMetrics,
+    setAPIUsageLogs, setRouteMetrics, setOperationalMetrics,
+    setDeploymentLogs, setFinancialEvents, setInfraMetrics,
+    setLoading, computeGlobalAggregate, computeSustainability,
+  ]);
 
   useEffect(() => {
     if (initialized.current) return;
@@ -102,8 +107,8 @@ export function useApexData() {
       await loadAll();
     }, 30000);
 
-    return () => clearInterval(interval);
-  }, []); // runs once on mount
+    return () => clearInterval(refreshInterval);
+  }, [loadAll, appendLiveFeedEvent, addAlert]);
 }
 
 export default useApexData;
