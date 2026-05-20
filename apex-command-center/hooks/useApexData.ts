@@ -3,15 +3,20 @@
  * APEX COMMAND CENTER OS
  * hooks/useApexData.ts
  *
- * Central data loader hook. Reads all data from IndexedDB via Storage
- * and hydrates the Zustand store. Called once on app mount.
+ * Central data loader. Reads all real data from IndexedDB via Storage
+ * and hydrates the Zustand store. No mock/seed data.
+ *
+ * Data enters the system from:
+ *  - Fleet Control dashboards  → POST /api/telemetry, /api/routes, /api/fleet-heartbeat
+ *  - Driver apps               → POST /api/route-complete, /api/driver-metrics
+ *  - Pairing engine            → registers new tenants + fleets
  */
 
 import { useEffect, useRef, useCallback } from 'react';
 import Storage from '@/storage/storage';
 import { useApexStore } from '@/store/apex-store';
-import seedDemoData from '@/lib/seed';
 import { startEngine, subscribeTelemetry } from '@/lib/telemetry-engine';
+import type { TelemetryEvent } from '@/types';
 
 export function useApexData() {
   const initialized = useRef(false);
@@ -19,8 +24,8 @@ export function useApexData() {
     setTenants, setFleets, setTelemetryEvents, setAIMetrics,
     setAPIUsageLogs, setRouteMetrics, setOperationalMetrics,
     setDeploymentLogs, setFinancialEvents, setInfraMetrics,
-    setLoading, setSeeded, computeGlobalAggregate, appendLiveFeedEvent,
-    addAlert,
+    setLoading, computeGlobalAggregate, computeSustainability,
+    appendLiveFeedEvent, addAlert,
   } = useApexStore();
 
   const loadAll = useCallback(async () => {
@@ -28,7 +33,7 @@ export function useApexData() {
     try {
       const [
         tenants, fleets, aiMetrics, apiLogs, routeMetrics,
-        opsMetrics, deployLogs, financialEvents, infraMetrics
+        opsMetrics, deployLogs, financialEvents, infraMetrics,
       ] = await Promise.all([
         Storage.Tenants.getAll(),
         Storage.Fleets.getAll(),
@@ -36,7 +41,7 @@ export function useApexData() {
         Storage.APIUsage.getByTimeRange(Date.now() - 30 * 86400000, Date.now()),
         Storage.Routes.getByTimeRange(Date.now() - 30 * 86400000, Date.now()),
         Storage.Operations.getByTimeRange(Date.now() - 30 * 86400000, Date.now()),
-        Storage.Deployments.getAll(100),
+        Storage.Deployments.getAll(200),
         Storage.Financial.getByTimeRange(Date.now() - 30 * 86400000, Date.now()),
         Storage.Infra.getRecent(100),
       ]);
@@ -45,30 +50,19 @@ export function useApexData() {
         Date.now() - 7 * 86400000, Date.now()
       );
 
-      setTenants(tenants);
-      setFleets(fleets);
-      setTelemetryEvents(telemetry);
-      setAIMetrics(aiMetrics);
-      setAPIUsageLogs(apiLogs);
-      setRouteMetrics(routeMetrics);
-      setOperationalMetrics(opsMetrics);
-      setDeploymentLogs(deployLogs);
-      setFinancialEvents(financialEvents);
-      setInfraMetrics(infraMetrics);
+      setTenants(tenants as Parameters<typeof setTenants>[0]);
+      setFleets(fleets as Parameters<typeof setFleets>[0]);
+      setTelemetryEvents(telemetry as Parameters<typeof setTelemetryEvents>[0]);
+      setAIMetrics(aiMetrics as Parameters<typeof setAIMetrics>[0]);
+      setAPIUsageLogs(apiLogs as Parameters<typeof setAPIUsageLogs>[0]);
+      setRouteMetrics(routeMetrics as Parameters<typeof setRouteMetrics>[0]);
+      setOperationalMetrics(opsMetrics as Parameters<typeof setOperationalMetrics>[0]);
+      setDeploymentLogs(deployLogs as Parameters<typeof setDeploymentLogs>[0]);
+      setFinancialEvents(financialEvents as Parameters<typeof setFinancialEvents>[0]);
+      setInfraMetrics(infraMetrics as Parameters<typeof setInfraMetrics>[0]);
 
       computeGlobalAggregate();
-
-      // Load saved alerts from localStorage
-      const savedAlerts = Storage.Alerts.getAll();
-      savedAlerts.slice(0, 10).forEach((a: Record<string, unknown>) => {
-        if (!(a as { dismissed?: boolean }).dismissed) {
-          addAlert({
-            type: (a.type as 'info' | 'success' | 'warning' | 'danger') || 'info',
-            title: String(a.title || ''),
-            message: String(a.message || ''),
-          });
-        }
-      });
+      computeSustainability(30);
 
     } finally {
       setLoading(false);
@@ -80,33 +74,32 @@ export function useApexData() {
     initialized.current = true;
 
     const init = async () => {
-      // Seed demo data if empty
-      const result = await seedDemoData();
-      if (result.seeded) {
-        setSeeded(true);
-        addAlert({
-          type: 'success',
-          title: 'Demo Data Loaded',
-          message: `Seeded ${result.counts.tenants} tenants, ${result.counts.fleets} fleets, ${result.counts.telemetry} telemetry events.`,
-        });
-      }
-
       await loadAll();
 
-      // Start telemetry engine
+      // Start telemetry engine (processes incoming queue, flushes to IndexedDB)
       startEngine({ batchSize: 50, flushIntervalMs: 15000 });
 
-      // Subscribe to live telemetry for UI feed
-      subscribeTelemetry((event) => {
+      // Subscribe to live telemetry feed for real-time UI updates
+      subscribeTelemetry((event: TelemetryEvent) => {
         appendLiveFeedEvent(event);
       });
+
+      // Alert if no tenants — guide user to pair first fleet
+      const { tenants } = useApexStore.getState();
+      if (tenants.length === 0) {
+        addAlert({
+          type: 'info',
+          title: 'No Fleet Data Yet',
+          message: 'Pair your first Fleet Control dashboard or Driver app using the Tenants → Register Fleet button.',
+        });
+      }
     };
 
     init().catch(console.error);
 
-    // Refresh aggregate every 30 seconds
-    const refreshInterval = setInterval(() => {
-      computeGlobalAggregate();
+    // Recompute every 30 seconds as live data arrives
+    const refreshInterval = setInterval(async () => {
+      await loadAll();
     }, 30000);
 
     return () => clearInterval(refreshInterval);

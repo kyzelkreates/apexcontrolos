@@ -131,14 +131,21 @@ export interface RouteMetric {
   distanceKm: number;
   durationMin: number;
   optimisationSavingPercent: number;
-  fuelSaved: number;
-  co2Saved: number;
+  /** Fuel saved vs non-optimised baseline (litres) */
+  fuelSavedL: number;
+  /** CO₂ avoided vs non-optimised baseline (kg) */
+  co2SavedKg: number;
+  /** Monetary value of fuel saved (USD) */
+  fuelCostSavedUSD: number;
   startTime: number;
   endTime: number;
   completedAt: number;
   aiOptimised: boolean;
   stops: number;
   onTimeDelivery: boolean;
+  // legacy compat aliases (may arrive from older fleet apps)
+  fuelSaved?: number;
+  co2Saved?: number;
 }
 
 // ============================================================
@@ -260,6 +267,57 @@ export interface ExportJob {
 }
 
 // ============================================================
+// SUSTAINABILITY METRICS (computed per entity)
+// ============================================================
+export interface SustainabilityMetrics {
+  /** Who this metric belongs to — "global", tenantId, fleetId, vehicleId, or driverId */
+  entityId: string;
+  entityType: 'global' | 'tenant' | 'fleet' | 'vehicle' | 'driver';
+  entityName: string;
+  /** Litres of fuel saved */
+  fuelSavedL: number;
+  /** Kg of CO₂ avoided */
+  co2SavedKg: number;
+  /** USD value of fuel saved */
+  fuelCostSavedUSD: number;
+  /** Routes run through AI optimisation */
+  routesOptimised: number;
+  /** Total routes */
+  totalRoutes: number;
+  /** Optimisation rate % */
+  optimisationRate: number;
+  /** Average route saving % */
+  avgSavingPercent: number;
+  /** Trees-equivalent CO₂ absorption (1 tree ≈ 21 kg CO₂/yr) */
+  treesEquivalent: number;
+  /** Petrol car km equivalent avoided (avg 0.12 kg CO₂/km) */
+  carKmEquivalent: number;
+  /** On-time delivery rate % */
+  onTimeRate: number;
+  /** Total distance driven (km) */
+  totalDistanceKm: number;
+  /** Period covered */
+  periodDays: number;
+}
+
+// ============================================================
+// DRIVER METRIC (inferred from route data)
+// ============================================================
+export interface DriverMetric {
+  driverId: string;
+  fleetId: string;
+  tenantId: string;
+  totalRoutes: number;
+  onTimeRoutes: number;
+  totalDistanceKm: number;
+  fuelSavedL: number;
+  co2SavedKg: number;
+  fuelCostSavedUSD: number;
+  avgOptimisationPercent: number;
+  lastActive: number;
+}
+
+// ============================================================
 // DASHBOARD STATE
 // ============================================================
 export interface DashboardState {
@@ -275,7 +333,7 @@ export interface DashboardState {
 }
 
 // ============================================================
-// GLOBAL AGGREGATE (computed)
+// GLOBAL AGGREGATE (computed — NO mock values)
 // ============================================================
 export interface GlobalAggregate {
   totalTenants: number;
@@ -296,4 +354,13 @@ export interface GlobalAggregate {
   deploymentsActive: number;
   alertsActive: number;
   routeOptimisationAvg: number;
+  // Sustainability totals
+  totalFuelSavedL: number;
+  totalCO2SavedKg: number;
+  totalFuelCostSavedUSD: number;
+  totalTreesEquivalent: number;
+  totalCarKmEquivalent: number;
+  totalRoutesOptimised: number;
+  totalRoutes: number;
+  globalOnTimeRate: number;
 }
