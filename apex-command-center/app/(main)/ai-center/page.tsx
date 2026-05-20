@@ -150,11 +150,11 @@ export default function AICenterPage() {
   }, [filtered]);
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-4 sm:space-y-6 animate-fade-in">
       {/* Header */}
       <div className="flex items-start justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-apex-text">
+          <h1 className="text-xl sm:text-2xl font-bold text-apex-text">
             AI <span className="apex-gradient-text">Intelligence Center</span>
           </h1>
           <p className="text-sm text-apex-textMuted mt-1">
@@ -185,7 +185,7 @@ export default function AICenterPage() {
       </div>
 
       {/* KPIs */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-2 sm:grid-cols-2 lg:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <MetricCard
           title="Local Inference"
           value={`${localPct.toFixed(1)}%`}
@@ -222,7 +222,7 @@ export default function AICenterPage() {
       </div>
 
       {/* Secondary KPIs */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-2 sm:grid-cols-2 lg:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <MetricCard title="Success Rate" value={`${successRate.toFixed(1)}%`} icon={CheckCircle2} variant="success" loading={isLoading} />
         <MetricCard title="Cache Hits" value={formatNumber(cacheHits)} subtitle={`${cacheHitPct.toFixed(1)}%`} icon={Zap} variant="accent" loading={isLoading} />
         <MetricCard title="Fallbacks" value={formatNumber(fallbacks)} subtitle="Cloud fallback triggers" icon={AlertTriangle} variant={fallbacks > 10 ? 'danger' : 'warning'} loading={isLoading} />

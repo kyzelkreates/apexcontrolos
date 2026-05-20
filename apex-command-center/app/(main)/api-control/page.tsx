@@ -130,11 +130,11 @@ export default function APIControlPage() {
   const categoryPie = byCategory.map((c) => ({ name: c.category, value: parseFloat(c.cost.toFixed(2)) }));
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-4 sm:space-y-6 animate-fade-in">
       {/* Header */}
       <div className="flex items-start justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-apex-text">
+          <h1 className="text-xl sm:text-2xl font-bold text-apex-text">
             API <span className="apex-gradient-text">Cost Control</span>
           </h1>
           <p className="text-sm text-apex-textMuted mt-1">
@@ -154,7 +154,7 @@ export default function APIControlPage() {
       </div>
 
       {/* KPIs */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-2 sm:grid-cols-2 lg:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <MetricCard title="Total API Calls" value={formatNumber(totalCalls)} icon={Zap} variant="accent" loading={isLoading} />
         <MetricCard title="Total Cost" value={formatCurrency(totalCost)} subtitle="30-day period" icon={DollarSign} variant="warning" loading={isLoading} trend={{ value: -5, label: 'vs prev period' }} />
         <MetricCard title="Avg Latency" value={`${avgLatency.toFixed(0)}ms`} icon={Clock} variant="default" loading={isLoading} />
@@ -303,7 +303,7 @@ export default function APIControlPage() {
       {/* Anomaly Detection Panel */}
       <div className="rounded-xl border border-apex-warning/30 bg-apex-warning/5 p-5">
         <SectionHeader title="API Anomaly Detection" subtitle="Services exceeding error thresholds" icon={AlertTriangle} />
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 mt-2">
+        <div className="grid grid-cols-1 lg:grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mt-2">
           {byService.filter((s) => s.errorRate > 1.5).slice(0, 6).map((s) => (
             <div key={s.service} className="flex items-center justify-between rounded-lg border border-apex-warning/20 bg-apex-card px-3 py-2.5">
               <div>

@@ -170,14 +170,14 @@ export default function FleetOpsPage() {
   ];
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-4 sm:space-y-6 animate-fade-in">
       <div>
-        <h1 className="text-2xl font-bold text-apex-text">Fleet <span className="apex-gradient-text">Operations</span></h1>
+        <h1 className="text-xl sm:text-2xl font-bold text-apex-text">Fleet <span className="apex-gradient-text">Operations</span></h1>
         <p className="text-sm text-apex-textMuted mt-1">Live fleet monitoring · Route analytics · Sustainability · Driver performance</p>
       </div>
 
       {/* KPI Row — Fleet */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-2 sm:grid-cols-2 lg:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <MetricCard title="Total Vehicles" value={formatNumber(totalVehicles)} subtitle={`${formatNumber(activeVehicles)} active`} icon={Truck} variant="accent" loading={isLoading} />
         <MetricCard title="Active Drivers" value={formatNumber(activeDrivers)} subtitle={`${formatNumber(totalDrivers)} total`} icon={Users} variant="purple" loading={isLoading} />
         <MetricCard title="Avg Fleet Uptime" value={`${avgUptime.toFixed(1)}%`} icon={Shield} variant={avgUptime > 95 ? 'success' : avgUptime > 85 ? 'warning' : 'danger'} loading={isLoading} />
@@ -232,7 +232,7 @@ export default function FleetOpsPage() {
           </div>
 
           {/* Charts */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
             <div className="rounded-xl border border-apex-border bg-apex-card p-5">
               <SectionHeader title="Fleet Uptime" subtitle="Top 10 fleets" icon={Shield} />
               {uptimeChart.length === 0
@@ -283,7 +283,7 @@ export default function FleetOpsPage() {
 
       {/* Tab: Sustainability */}
       {activeTab === 'sustainability' && (
-        <div className="space-y-6">
+        <div className="space-y-4 sm:space-y-6">
           {fleetSustainability.length === 0 ? (
             <EmptyState message="No route data yet. Sustainability metrics appear once drivers complete optimised routes." />
           ) : (
@@ -346,7 +346,7 @@ export default function FleetOpsPage() {
 
       {/* Tab: Drivers */}
       {activeTab === 'drivers' && (
-        <div className="space-y-6">
+        <div className="space-y-4 sm:space-y-6">
           {driverLeaderboard.length === 0 ? (
             <EmptyState message="No driver data yet. Driver metrics appear once routes complete with a driverId." />
           ) : (

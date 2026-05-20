@@ -92,10 +92,10 @@ export default function FinancePage() {
   }, [filtered, tenants]);
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-4 sm:space-y-6 animate-fade-in">
       <div className="flex items-start justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-apex-text">Financial <span className="apex-gradient-text">Intelligence</span></h1>
+          <h1 className="text-xl sm:text-2xl font-bold text-apex-text">Financial <span className="apex-gradient-text">Intelligence</span></h1>
           <p className="text-sm text-apex-textMuted mt-1">Revenue · Costs · AI savings · Tenant profitability</p>
         </div>
         <select
@@ -109,14 +109,14 @@ export default function FinancePage() {
       </div>
 
       {/* KPIs */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-2 sm:grid-cols-2 lg:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <MetricCard title="Total Revenue" value={formatCurrency(totalRevenue)} icon={DollarSign} variant="success" loading={isLoading} trend={{ value: 14, label: '30 days' }} />
         <MetricCard title="Total Costs" value={formatCurrency(totalCosts)} subtitle="API + AI + Infra" icon={TrendingDown} variant="warning" loading={isLoading} />
         <MetricCard title="Optimisation Savings" value={formatCurrency(totalSavings)} subtitle="Route efficiency gains" icon={TrendingUp} variant="accent" loading={isLoading} />
         <MetricCard title="Net Margin" value={`${netMargin.toFixed(1)}%`} icon={BarChart2} variant={netMargin > 30 ? 'success' : netMargin > 10 ? 'warning' : 'danger'} loading={isLoading} />
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-2 sm:grid-cols-2 lg:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <MetricCard title="API Costs" value={formatCurrency(totalApiCost)} icon={Zap} variant="warning" loading={isLoading} />
         <MetricCard title="AI Costs" value={formatCurrency(totalAiCost)} subtitle="Cloud inference only" icon={Brain} variant="purple" loading={isLoading} />
         <MetricCard title="Infrastructure" value={formatCurrency(totalInfra)} icon={Activity} variant="default" loading={isLoading} />
@@ -151,7 +151,7 @@ export default function FinancePage() {
       </div>
 
       {/* Cost Breakdown + Tenant Profitability */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
         <div className="rounded-xl border border-apex-border bg-apex-card p-5">
           <SectionHeader title="Cost Breakdown" subtitle="Distribution by category" icon={PieChartIcon} />
           <ResponsiveContainer width="100%" height={200}>

@@ -666,12 +666,12 @@ export default function TenantsPage() {
   const hasData = tenants.length > 0;
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-4 sm:space-y-6 animate-fade-in">
 
       {/* Page header */}
       <div className="flex items-start justify-between flex-wrap gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-apex-text">
+          <h1 className="text-xl sm:text-2xl font-bold text-apex-text">
             Fleet <span className="apex-gradient-text">Registry</span>
           </h1>
           <p className="text-sm text-apex-textMuted mt-1">
@@ -687,7 +687,7 @@ export default function TenantsPage() {
       </div>
 
       {/* KPIs */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-2 sm:grid-cols-2 lg:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <MetricCard title="Total Tenants" value={tenants.length} icon={Building2} variant="accent" loading={isLoading} />
         <MetricCard title="Active Tenants" value={activeCount} icon={CheckCircle2} variant="success" loading={isLoading} />
         <MetricCard title="Online Fleets" value={onlineFleets} icon={Wifi} variant="default" loading={isLoading} />
@@ -753,7 +753,7 @@ export default function TenantsPage() {
               No tenants match your filter.
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
               {filtered.map((tenant) => (
                 <TenantCard
                   key={tenant.id}

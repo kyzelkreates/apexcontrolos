@@ -35,16 +35,16 @@ export default function SettingsPage() {
   const totalRecords = storeEntries.reduce((a, [, v]) => a + (v.ok ? v.count : 0), 0);
 
   return (
-    <div className="space-y-6 animate-fade-in max-w-3xl">
+    <div className="space-y-4 sm:space-y-6 animate-fade-in max-w-3xl">
       <div>
-        <h1 className="text-2xl font-bold text-apex-text">System <span className="apex-gradient-text">Settings</span></h1>
+        <h1 className="text-xl sm:text-2xl font-bold text-apex-text">System <span className="apex-gradient-text">Settings</span></h1>
         <p className="text-sm text-apex-textMuted mt-1">Configuration · Storage health · Audit · Data management</p>
       </div>
 
       {/* Storage Health */}
       <div className="rounded-xl border border-apex-border bg-apex-card p-5">
         <SectionHeader title="Storage Health" subtitle="IndexedDB + localStorage status" icon={Database} />
-        <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 mb-4">
+        <div className="grid grid-cols-2 lg:grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-4">
           <MetricCard title="IndexedDB" value={health?.indexedDB ? 'Online' : 'Offline'} variant={health?.indexedDB ? 'success' : 'danger'} />
           <MetricCard title="LocalStorage" value={health?.localStorage ? 'Online' : 'Offline'} variant={health?.localStorage ? 'success' : 'danger'} />
           <MetricCard title="Total Records" value={totalRecords.toLocaleString()} variant="accent" />
@@ -166,7 +166,7 @@ export default function SettingsPage() {
       {/* Audit Log */}
       <div className="rounded-xl border border-apex-border bg-apex-card p-5">
         <SectionHeader title="Audit Log" subtitle="Last 20 system actions" icon={Shield} />
-        <div className="space-y-1 max-h-64 overflow-y-auto font-mono text-xs">
+        <div className="space-y-1 max-h-40 sm:h-48 sm:h-64 overflow-y-auto font-mono text-xs">
           {Storage.Audit.getAll().slice(0, 20).map((entry: Record<string, unknown>) => (
             <div key={String(entry.id)} className="flex items-center gap-3 rounded bg-apex-surface px-3 py-1.5">
               <span className="text-apex-textMuted w-28 flex-shrink-0">{new Date(Number(entry.timestamp)).toLocaleTimeString()}</span>

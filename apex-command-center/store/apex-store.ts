@@ -275,6 +275,7 @@ interface ApexStore {
   selectedFleetId: string | null;
   activeModule: string;
   sidebarCollapsed: boolean;
+  mobileSidebarOpen: boolean;
   dateRange: { from: number; to: number };
   isLoading: boolean;
   isSeeded: boolean;
@@ -314,6 +315,7 @@ interface ApexStore {
   setSelectedFleet: (id: string | null) => void;
   setActiveModule: (module: string) => void;
   setSidebarCollapsed: (collapsed: boolean) => void;
+  setMobileSidebarOpen: (open: boolean) => void;
   setDateRange: (range: { from: number; to: number }) => void;
   setLoading: (loading: boolean) => void;
   setSeeded: (seeded: boolean) => void;
@@ -352,6 +354,7 @@ export const useApexStore = create<ApexStore>()(
       selectedFleetId: null,
       activeModule: 'overview',
       sidebarCollapsed: false,
+      mobileSidebarOpen: false,
       dateRange: { from: Date.now() - 86400000 * 30, to: Date.now() },
       isLoading: true,
       isSeeded: false,
@@ -417,6 +420,7 @@ export const useApexStore = create<ApexStore>()(
       setSelectedFleet: (id) => set({ selectedFleetId: id }),
       setActiveModule: (module) => set({ activeModule: module }),
       setSidebarCollapsed: (collapsed) => set({ sidebarCollapsed: collapsed }),
+      setMobileSidebarOpen: (open) => set({ mobileSidebarOpen: open }),
       setDateRange: (range) => set({ dateRange: range }),
       setLoading: (isLoading) => set({ isLoading }),
       setSeeded: (isSeeded) => set({ isSeeded }),

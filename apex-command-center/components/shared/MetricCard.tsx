@@ -53,52 +53,47 @@ export function MetricCard({
   return (
     <div
       className={cn(
-        'relative overflow-hidden rounded-xl border bg-apex-card p-5 shadow-apex-card transition-all duration-200 hover:border-opacity-60',
+        'relative overflow-hidden rounded-xl border bg-apex-card p-3 sm:p-4 md:p-5 shadow-apex-card transition-all duration-200 hover:border-opacity-60',
         variantStyles[variant],
         className
       )}
     >
-      {/* Background glow */}
       {variant === 'accent' && (
         <div className="absolute inset-0 bg-apex-accent/3 pointer-events-none" />
       )}
 
-      <div className="flex items-start justify-between">
+      <div className="flex items-start justify-between gap-2">
         <div className="flex-1 min-w-0">
-          <p className="text-xs font-medium uppercase tracking-wider text-apex-textMuted truncate">
+          <p className="text-[10px] sm:text-xs font-medium uppercase tracking-wider text-apex-textMuted truncate">
             {title}
           </p>
 
           {loading ? (
-            <div className="mt-2 h-8 w-24 rounded bg-apex-border animate-pulse" />
+            <div className="mt-2 h-6 sm:h-8 w-20 sm:w-24 rounded bg-apex-border animate-pulse" />
           ) : (
-            <p className={cn('mt-1 text-2xl font-bold font-mono tracking-tight', valueStyles[variant])}>
+            <p className={cn('mt-1 text-lg sm:text-xl md:text-2xl font-bold font-mono tracking-tight leading-tight', valueStyles[variant])}>
               {value}
             </p>
           )}
 
           {subtitle && (
-            <p className="mt-1 text-xs text-apex-textMuted truncate">{subtitle}</p>
+            <p className="mt-1 text-[10px] sm:text-xs text-apex-textMuted truncate">{subtitle}</p>
           )}
 
           {trend && (
-            <div className="mt-2 flex items-center gap-1">
-              <span
-                className={cn(
-                  'text-xs font-medium',
-                  trend.value >= 0 ? 'text-apex-success' : 'text-apex-danger'
-                )}
-              >
+            <div className="mt-1.5 flex items-center gap-1">
+              <span className={cn('text-xs font-medium', trend.value >= 0 ? 'text-apex-success' : 'text-apex-danger')}>
                 {trend.value >= 0 ? '↑' : '↓'} {Math.abs(trend.value)}%
               </span>
-              <span className="text-xs text-apex-textMuted">{trend.label}</span>
+              <span className="text-[10px] text-apex-textMuted">{trend.label}</span>
             </div>
           )}
         </div>
 
         {Icon && (
-          <div className={cn('flex-shrink-0 p-2.5 rounded-lg', iconStyles[variant])}>
-            <Icon size={18} />
+          <div className={cn('flex-shrink-0 p-2 sm:p-2.5 rounded-lg', iconStyles[variant])}>
+            <Icon size={15} className="sm:hidden" />
+            <Icon size={18} className="hidden sm:block" />
           </div>
         )}
       </div>
