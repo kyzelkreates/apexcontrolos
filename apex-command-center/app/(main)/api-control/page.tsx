@@ -8,6 +8,7 @@ import {
   Zap, DollarSign, AlertTriangle, TrendingUp,
   Activity, BarChart2, Globe, Clock
 } from 'lucide-react';
+import { NoDataBanner } from '@/components/shared/NoDataBanner';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell, Legend, AreaChart, Area
@@ -44,6 +45,8 @@ export default function APIControlPage() {
       return true;
     });
   }, [apiUsageLogs, selectedCategory, selectedTenantId]);
+
+  const hasData = apiUsageLogs.length > 0;
 
   // Aggregates
   const totalCalls = filtered.reduce((a, l) => a + l.calls, 0);
@@ -131,6 +134,7 @@ export default function APIControlPage() {
 
   return (
     <div className="space-y-6 animate-fade-in">
+      <NoDataBanner hasData={hasData} dataLabel="API usage logs" />
       {/* Header */}
       <div className="flex items-start justify-between flex-wrap gap-3">
         <div>

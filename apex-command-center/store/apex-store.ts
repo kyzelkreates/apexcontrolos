@@ -353,7 +353,7 @@ export const useApexStore = create<ApexStore>()(
       activeModule: 'overview',
       sidebarCollapsed: false,
       dateRange: { from: Date.now() - 86400000 * 30, to: Date.now() },
-      isLoading: true,
+      isLoading: false,
       isSeeded: false,
       alerts: [],
       liveFeed: [],

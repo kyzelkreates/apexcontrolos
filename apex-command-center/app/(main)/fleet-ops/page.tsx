@@ -15,6 +15,7 @@ import {
   ResponsiveContainer, AreaChart, Area, Legend,
 } from 'recharts';
 import type { FleetEntity, SustainabilityMetrics, DriverMetric } from '@/types';
+import { NoDataBanner } from '@/components/shared/NoDataBanner';
 
 const CustomTooltip = ({ active, payload, label }: Record<string, unknown>) => {
   if (!(active as boolean)) return null;
@@ -43,6 +44,8 @@ export default function FleetOpsPage() {
     if (selectedStatus !== 'all' && f.status !== selectedStatus) return false;
     return true;
   }), [fleets, selectedRegion, selectedStatus]);
+
+  const hasData = fleets.length > 0;
 
   // KPI aggregates from real fleet data
   const totalVehicles = filteredFleets.reduce((a, f) => a + f.vehicleCount, 0);
@@ -171,6 +174,7 @@ export default function FleetOpsPage() {
 
   return (
     <div className="space-y-6 animate-fade-in">
+      <NoDataBanner hasData={hasData} dataLabel="fleet entities" />
       <div>
         <h1 className="text-2xl font-bold text-apex-text">Fleet <span className="apex-gradient-text">Operations</span></h1>
         <p className="text-sm text-apex-textMuted mt-1">Live fleet monitoring · Route analytics · Sustainability · Driver performance</p>

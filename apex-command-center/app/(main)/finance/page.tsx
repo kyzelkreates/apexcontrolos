@@ -5,6 +5,7 @@ import { MetricCard } from '@/components/shared/MetricCard';
 import { SectionHeader } from '@/components/shared/SectionHeader';
 import { formatCurrency, formatNumber, cn } from '@/lib/utils';
 import { DollarSign, TrendingUp, TrendingDown, BarChart2, PieChartIcon, Zap, Brain, Activity } from 'lucide-react';
+import { NoDataBanner } from '@/components/shared/NoDataBanner';
 import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, PieChart, Pie, Cell, Legend
@@ -34,6 +35,8 @@ export default function FinancePage() {
   const filtered = useMemo(() => {
     return selectedTenantId === 'all' ? financialEvents : financialEvents.filter((e) => e.tenantId === selectedTenantId);
   }, [financialEvents, selectedTenantId]);
+
+  const hasData = financialEvents.length > 0;
 
   const totalRevenue = filtered.filter((e) => e.category === 'revenue').reduce((a, e) => a + e.amount, 0);
   const totalApiCost = filtered.filter((e) => e.category === 'api_cost').reduce((a, e) => a + e.amount, 0);
@@ -93,6 +96,7 @@ export default function FinancePage() {
 
   return (
     <div className="space-y-6 animate-fade-in">
+      <NoDataBanner hasData={hasData} dataLabel="financial events" />
       <div className="flex items-start justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-bold text-apex-text">Financial <span className="apex-gradient-text">Intelligence</span></h1>

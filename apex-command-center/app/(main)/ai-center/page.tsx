@@ -14,6 +14,7 @@ import {
   Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend, LineChart, Line
 } from 'recharts';
 import type { AIProvider } from '@/types';
+import { NoDataBanner } from '@/components/shared/NoDataBanner';
 
 const PROVIDER_COLORS: Record<string, string> = {
   ollama: '#10b981', llama: '#059669', mistral: '#8b5cf6', deepseek: '#7c3aed',
@@ -57,6 +58,8 @@ export default function AICenterPage() {
       return true;
     });
   }, [aiMetrics, selectedProvider, selectedTenantId]);
+
+  const hasData = aiMetrics.length > 0;
 
   // ── Aggregates ──────────────────────────────────────────────
   const totalTokens = filtered.reduce((a, m) => a + m.tokensUsed, 0);
@@ -151,6 +154,7 @@ export default function AICenterPage() {
 
   return (
     <div className="space-y-6 animate-fade-in">
+      <NoDataBanner hasData={hasData} dataLabel="AI inference metrics" />
       {/* Header */}
       <div className="flex items-start justify-between flex-wrap gap-3">
         <div>

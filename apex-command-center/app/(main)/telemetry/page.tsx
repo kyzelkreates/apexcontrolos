@@ -8,6 +8,7 @@ import { formatNumber, timeAgo, cn } from '@/lib/utils';
 import { Activity, CheckCircle2, AlertTriangle, Layers, Zap, Database } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
 import { getEngineStats } from '@/lib/telemetry-engine';
+import { NoDataBanner } from '@/components/shared/NoDataBanner';
 
 const CustomTooltip = ({ active, payload, label }: Record<string, unknown>) => {
   if (!(active as boolean)) return null;
@@ -24,6 +25,7 @@ const CustomTooltip = ({ active, payload, label }: Record<string, unknown>) => {
 export default function TelemetryPage() {
   const { telemetryEvents, liveFeed, tenants, isLoading } = useApexStore();
   const engineStats = getEngineStats();
+  const hasData = telemetryEvents.length > 0;
 
   const processed = telemetryEvents.filter((e) => e.processed).length;
   const unprocessed = telemetryEvents.filter((e) => !e.processed).length;
@@ -62,6 +64,7 @@ export default function TelemetryPage() {
 
   return (
     <div className="space-y-6 animate-fade-in">
+      <NoDataBanner hasData={hasData} dataLabel="telemetry events" />
       <div>
         <h1 className="text-2xl font-bold text-apex-text">Telemetry <span className="apex-gradient-text">Ingestion</span></h1>
         <p className="text-sm text-apex-textMuted mt-1">Batched ingestion · Queue monitoring · Delta-sync · Offline reconciliation</p>
