@@ -2,6 +2,7 @@
 import React from 'react';
 import { Sidebar } from '@/components/shared/Sidebar';
 import { TopBar } from '@/components/shared/TopBar';
+import { DataModeDebug } from '@/components/shared/DataModeDebug';
 import { useApexData } from '@/hooks/useApexData';
 
 export default function MainLayout({ children }: { children: React.ReactNode }) {
@@ -16,6 +17,8 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
           {children}
         </main>
       </div>
+      {/* Admin debug overlay — only visible when DATA_DEBUG = true in core/dataMode.ts */}
+      <DataModeDebug />
     </div>
   );
 }

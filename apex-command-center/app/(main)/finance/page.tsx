@@ -1,6 +1,7 @@
 'use client';
 import React, { useMemo, useState } from 'react';
 import { useApexStore } from '@/store/apex-store';
+import { deriveFinancials, shouldUseDerivedFinance } from '@/core/financeResolver';
 import { MetricCard } from '@/components/shared/MetricCard';
 import { SectionHeader } from '@/components/shared/SectionHeader';
 import { formatCurrency, formatNumber, cn } from '@/lib/utils';
@@ -28,23 +29,60 @@ const CustomTooltip = ({ active, payload, label }: Record<string, unknown>) => {
 };
 
 export default function FinancePage() {
-  const { financialEvents, tenants, isLoading } = useApexStore();
+  const { financialEvents, apiUsageLogs, operationalMetrics, infraMetrics, aiMetrics, tenants, isLoading } = useApexStore();
   const [selectedTenantId, setSelectedTenantId] = useState('all');
 
   const filtered = useMemo(() => {
     return selectedTenantId === 'all' ? financialEvents : financialEvents.filter((e) => e.tenantId === selectedTenantId);
   }, [financialEvents, selectedTenantId]);
 
-  const totalRevenue = filtered.filter((e) => e.category === 'revenue').reduce((a, e) => a + e.amount, 0);
-  const totalApiCost = filtered.filter((e) => e.category === 'api_cost').reduce((a, e) => a + e.amount, 0);
-  const totalAiCost = filtered.filter((e) => e.category === 'ai_cost').reduce((a, e) => a + e.amount, 0);
-  const totalInfra = filtered.filter((e) => e.category === 'infrastructure').reduce((a, e) => a + e.amount, 0);
-  const totalSavings = filtered.filter((e) => e.category === 'optimisation_saving').reduce((a, e) => a + e.amount, 0);
-  const totalCosts = totalApiCost + totalAiCost + totalInfra;
-  const netMargin = totalRevenue > 0 ? ((totalRevenue - totalCosts) / totalRevenue) * 100 : 0;
+  // Step 5 rule: in hybrid/live mode use full derivation across all event stores
+  // In mock mode, fall back to direct financial_events sums (same result, seed writes them)
+  const derived = useMemo(() => {
+    if (shouldUseDerivedFinance) {
+      const eventsForTenant = selectedTenantId === 'all'
+        ? financialEvents
+        : financialEvents.filter((e) => e.tenantId === selectedTenantId);
+      const apiForTenant = selectedTenantId === 'all'
+        ? apiUsageLogs
+        : apiUsageLogs.filter((l) => l.tenantId === selectedTenantId);
+      const aiForTenant = selectedTenantId === 'all'
+        ? aiMetrics
+        : aiMetrics.filter((m) => m.tenantId === selectedTenantId);
+      const opsForTenant = selectedTenantId === 'all'
+        ? operationalMetrics
+        : operationalMetrics.filter((m) => m.tenantId === selectedTenantId);
+      return deriveFinancials(eventsForTenant, apiForTenant, aiForTenant, opsForTenant, infraMetrics, 30);
+    }
+    // mock mode — derive directly from financial_events only
+    const rev = filtered.filter((e) => e.category === 'revenue').reduce((a, e) => a + (e.amount ?? 0), 0);
+    const apiC = filtered.filter((e) => e.category === 'api_cost').reduce((a, e) => a + (e.amount ?? 0), 0);
+    const aiC = filtered.filter((e) => e.category === 'ai_cost').reduce((a, e) => a + (e.amount ?? 0), 0);
+    const infC = filtered.filter((e) => e.category === 'infrastructure').reduce((a, e) => a + (e.amount ?? 0), 0);
+    const sav = filtered.filter((e) => e.category === 'optimisation_saving').reduce((a, e) => a + (e.amount ?? 0), 0);
+    const costs = apiC + aiC + infC;
+    return {
+      totalRevenue: rev, totalApiCost: apiC, totalAICost: aiC,
+      totalInfraCost: infC, totalCosts: costs, totalSavings: sav,
+      netMargin: rev > 0 ? parseFloat(((rev - costs) / rev * 100).toFixed(1)) : 0,
+      costBreakdown: [
+        { name: 'API Cost', value: parseFloat(apiC.toFixed(0)) },
+        { name: 'AI Cost', value: parseFloat(aiC.toFixed(0)) },
+        { name: 'Infrastructure', value: parseFloat(infC.toFixed(0)) },
+      ].filter((d) => d.value > 0),
+      dailyTrend: [],
+      revenueByCategory: {},
+    };
+  }, [filtered, financialEvents, apiUsageLogs, aiMetrics, operationalMetrics, infraMetrics, selectedTenantId]);
 
-  // Daily revenue vs cost trend
+  const { totalRevenue, totalApiCost, totalAICost: totalAiCost, totalInfraCost: totalInfra,
+          totalCosts, totalSavings, netMargin, costBreakdown: derivedCostBreakdown } = derived;
+
+  // Daily trend — use derived (covers all event stores) or build from financialEvents fallback
   const dailyTrend = useMemo(() => {
+    if (derived.dailyTrend.length > 0) {
+      return derived.dailyTrend.map((d) => ({ ...d, costs: d.cost }));
+    }
     const byDay: Record<string, { revenue: number; costs: number; savings: number }> = {};
     const now = Date.now();
     for (let i = 29; i >= 0; i--) {
@@ -54,9 +92,9 @@ export default function FinancePage() {
     filtered.forEach((e) => {
       const day = new Date(e.timestamp).toLocaleDateString('en-CA').slice(5);
       if (!byDay[day]) return;
-      if (e.category === 'revenue') byDay[day].revenue += e.amount;
-      else if (e.category === 'optimisation_saving') byDay[day].savings += e.amount;
-      else byDay[day].costs += e.amount;
+      if (e.category === 'revenue') byDay[day].revenue += e.amount ?? 0;
+      else if (e.category === 'optimisation_saving') byDay[day].savings += e.amount ?? 0;
+      else byDay[day].costs += e.amount ?? 0;
     });
     return Object.entries(byDay).map(([date, v]) => ({
       date,
@@ -64,10 +102,10 @@ export default function FinancePage() {
       costs: parseFloat(v.costs.toFixed(0)),
       savings: parseFloat(v.savings.toFixed(0)),
     }));
-  }, [filtered]);
+  }, [derived, filtered]);
 
-  // Pie: cost breakdown
-  const costPie = [
+  // Pie: cost breakdown — use derived breakdown (covers api logs + ai metrics)
+  const costPie = derivedCostBreakdown.length > 0 ? derivedCostBreakdown : [
     { name: 'API Cost', value: parseFloat(totalApiCost.toFixed(0)) },
     { name: 'AI Cost', value: parseFloat(totalAiCost.toFixed(0)) },
     { name: 'Infrastructure', value: parseFloat(totalInfra.toFixed(0)) },
