@@ -598,6 +598,9 @@ export const ConfigStore = {
       encryptionEnabled: false,
       auditLogEnabled: true,
       backendMigrationReady: false,
+      // Deployment Source Mode — controls deploymentProvider.ts routing
+      // 'simulation' = local generated data | 'live' = real AP3X dashboards
+      deploymentMode: 'simulation',
     };
   },
   set(config) { lsSet('system_config', config); },
