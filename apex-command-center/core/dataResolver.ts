@@ -114,13 +114,14 @@ export function resolveArray<T>(
  * @param source  Array of objects
  * @param key     Field name to sum (must be numeric)
  */
-export function safeSum<T extends Record<string, unknown>>(
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function safeSum<T extends object>(
   source: Nullable<T[]>,
   key: keyof T
 ): number {
   if (!Array.isArray(source) || source.length === 0) return 0;
   return source.reduce((acc, item) => {
-    const v = item[key];
+    const v = (item as Record<string | symbol, unknown>)[key as string | symbol];
     return acc + (typeof v === 'number' ? v : parseFloat(String(v ?? 0)) || 0);
   }, 0);
 }
@@ -132,13 +133,14 @@ export function safeSum<T extends Record<string, unknown>>(
  * @param source  Array of objects
  * @param key     Field name to group by
  */
-export function safeGroupBy<T extends Record<string, unknown>>(
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function safeGroupBy<T extends object>(
   source: Nullable<T[]>,
   key: keyof T
 ): Record<string, T[]> {
   if (!Array.isArray(source) || source.length === 0) return {};
   return source.reduce<Record<string, T[]>>((acc, item) => {
-    const k = String(item[key] ?? '__unknown__');
+    const k = String((item as Record<string | symbol, unknown>)[key as string | symbol] ?? '__unknown__');
     if (!acc[k]) acc[k] = [];
     acc[k].push(item);
     return acc;
@@ -149,7 +151,8 @@ export function safeGroupBy<T extends Record<string, unknown>>(
  * safeAvg — averages a numeric field across an array.
  * Returns 0 if array is empty.
  */
-export function safeAvg<T extends Record<string, unknown>>(
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function safeAvg<T extends object>(
   source: Nullable<T[]>,
   key: keyof T
 ): number {
@@ -171,14 +174,15 @@ export function safeFilter<T>(
 /**
  * safeLatest — returns the N most recent items sorted by a timestamp key.
  */
-export function safeLatest<T extends Record<string, unknown>>(
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function safeLatest<T extends object>(
   source: Nullable<T[]>,
   timestampKey: keyof T,
   n = 10
 ): T[] {
   if (!Array.isArray(source) || source.length === 0) return [];
   return [...source]
-    .sort((a, b) => Number(b[timestampKey]) - Number(a[timestampKey]))
+    .sort((a, b) => Number((b as Record<string|symbol,unknown>)[timestampKey as string|symbol]) - Number((a as Record<string|symbol,unknown>)[timestampKey as string|symbol]))
     .slice(0, n);
 }
 

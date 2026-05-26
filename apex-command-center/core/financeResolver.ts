@@ -62,8 +62,8 @@ export function deriveFinancials(
 
   const revenueByCategory: Record<string, number> = {};
   revenueEvents.forEach((e) => {
-    revenueByCategory[e.subCategory ?? 'subscription'] =
-      (revenueByCategory[e.subCategory ?? 'subscription'] ?? 0) + (e.amount ?? 0);
+    revenueByCategory[e.description ?? 'subscription'] =
+      (revenueByCategory[e.description ?? 'subscription'] ?? 0) + (e.amount ?? 0);
   });
 
   // ── API Costs ────────────────────────────────────────────────────────────
@@ -89,7 +89,8 @@ export function deriveFinancials(
 
   // ── Savings ──────────────────────────────────────────────────────────────
   const recentOps = safeFilter(opsMetrics, (m) => m.timestamp >= cutoff);
-  const opsEventSavings = safeSum(recentOps, 'savings' as keyof OperationalMetric);
+  // OperationalMetric has no direct savings field — savings come from financial_events only
+  const opsEventSavings = 0;
 
   const savingEvents = safeFilter(
     financialEvents,
@@ -137,11 +138,7 @@ export function deriveFinancials(
     if (dailyMap[d]) dailyMap[d].cost += m.cost ?? 0;
   });
 
-  opsMetrics.forEach((m) => {
-    if ((m.timestamp ?? 0) < cutoff) return;
-    const d = new Date(m.timestamp ?? Date.now()).toLocaleDateString('en-CA').slice(5);
-    if (dailyMap[d]) dailyMap[d].savings += (m as Record<string, unknown>).savings as number ?? 0;
-  });
+  // OperationalMetric has no savings field — optimisation_saving already handled via financialEvents above
 
   const dailyTrend = Object.entries(dailyMap).map(([date, v]) => ({
     date,

@@ -17,10 +17,10 @@ export type DataMode = 'mock' | 'hybrid' | 'live';
 export const DATA_MODE: DataMode = 'hybrid';
 
 /** True when mock data is the primary source */
-export const ENABLE_MOCK: boolean = DATA_MODE === 'mock';
+export const ENABLE_MOCK: boolean = (DATA_MODE as string) === 'mock';
 
 /** True when mock data is allowed as a fallback */
-export const ENABLE_FALLBACK: boolean = DATA_MODE !== 'live';
+export const ENABLE_FALLBACK: boolean = (DATA_MODE as string) !== 'live';
 
 /** When true, the debug panel will expose mode + usage stats */
 export const DATA_DEBUG: boolean = false;
