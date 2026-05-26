@@ -13,6 +13,11 @@ import {
   getDeploymentMode, setDeploymentMode, getLiveEndpoints, saveLiveEndpoints,
   type DeploymentSourceMode, type LiveEndpoint,
 } from '@/services/deploymentProvider';
+import {
+  testSupabaseConnection,
+  type SupabaseJob,
+} from '@/services/supabaseDataService';
+import { isSupabaseConfigured } from '@/lib/supabaseClient';
 
 // ─────────────────────────────────────────────────────────────────
 // DEPLOYMENT SOURCE TOGGLE — sub-component
@@ -299,6 +304,197 @@ function DeploymentSourcePanel() {
 }
 
 // ─────────────────────────────────────────────────────────────────
+// SUPABASE CREDENTIALS PANEL — sub-component
+// ─────────────────────────────────────────────────────────────────
+function SupabaseCredentialsPanel() {
+  const [config, setConfigState] = React.useState(Storage.Config.get() as Record<string, unknown>);
+  const [testing, setTesting] = React.useState(false);
+  const [testResult, setTestResult] = React.useState<{
+    ok: boolean;
+    tables: { name: string; reachable: boolean }[];
+    error?: string;
+  } | null>(null);
+  const [saved, setSaved] = React.useState(false);
+
+  const supabaseUrl     = (config.supabaseUrl as string) ?? '';
+  const supabaseAnonKey = (config.supabaseAnonKey as string) ?? '';
+  const configured      = supabaseUrl.trim().length > 0 && supabaseAnonKey.trim().length > 0;
+
+  const save = () => {
+    Storage.Config.set(config);
+    setSaved(true);
+    setTestResult(null);
+    setTimeout(() => setSaved(false), 2000);
+    Storage.Audit.log({
+      action: 'SUPABASE_CREDENTIALS_UPDATED',
+      entityType: 'system',
+    });
+  };
+
+  const runTest = async () => {
+    if (!configured) return;
+    // Save first so the client picks up new creds
+    Storage.Config.set(config);
+    setTesting(true);
+    setTestResult(null);
+    try {
+      const result = await testSupabaseConnection();
+      setTestResult(result);
+    } catch {
+      setTestResult({ ok: false, tables: [], error: 'Connection test failed' });
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  const TABLE_NAMES = ['jobs', 'job_assignments', 'vehicles', 'profiles', 'telemetry', 'alerts'];
+
+  return (
+    <div className="rounded-xl border border-apex-border bg-apex-card p-5 space-y-4">
+      <SectionHeader
+        title="Supabase Integration"
+        subtitle="Connect AP3X Control OS to your Supabase project"
+        icon={Database}
+      />
+
+      {/* Status badge */}
+      <div className="flex items-center gap-2">
+        <div className={cn(
+          'h-2 w-2 rounded-full flex-shrink-0',
+          configured ? 'bg-apex-success animate-pulse' : 'bg-apex-textMuted'
+        )} />
+        <span className="text-xs text-apex-textMuted">
+          {configured
+            ? <span className="text-apex-success font-medium">Credentials configured</span>
+            : 'Not configured — system using IndexedDB only'}
+        </span>
+      </div>
+
+      <div className="space-y-3">
+        {/* Project URL */}
+        <div className="space-y-1.5">
+          <label className="text-xs font-medium text-apex-textDim">
+            Supabase Project URL
+          </label>
+          <input
+            type="url"
+            placeholder="https://xxxxxxxxxxxx.supabase.co"
+            value={supabaseUrl}
+            onChange={(e) =>
+              setConfigState((c) => ({ ...c, supabaseUrl: e.target.value }))
+            }
+            className="w-full rounded-lg border border-apex-border bg-apex-surface px-3 py-2 text-xs font-mono text-apex-text placeholder:text-apex-textMuted focus:outline-none focus:border-apex-accent/60"
+          />
+        </div>
+
+        {/* Anon key */}
+        <div className="space-y-1.5">
+          <label className="text-xs font-medium text-apex-textDim">
+            Supabase Anon Key
+          </label>
+          <input
+            type="password"
+            placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+            value={supabaseAnonKey}
+            onChange={(e) =>
+              setConfigState((c) => ({ ...c, supabaseAnonKey: e.target.value }))
+            }
+            className="w-full rounded-lg border border-apex-border bg-apex-surface px-3 py-2 text-xs font-mono text-apex-text placeholder:text-apex-textMuted focus:outline-none focus:border-apex-accent/60"
+          />
+          <p className="text-[10px] text-apex-textMuted">
+            Use the <span className="font-mono">anon</span> public key only. Never use the service_role key here.
+          </p>
+        </div>
+
+        {/* Action buttons */}
+        <div className="flex gap-2">
+          <button
+            onClick={save}
+            className={cn(
+              'flex-1 rounded-lg px-4 py-2 text-xs font-semibold transition-colors',
+              saved
+                ? 'bg-apex-success/10 border border-apex-success/30 text-apex-success'
+                : 'bg-apex-accent text-white hover:bg-apex-accentDim'
+            )}
+          >
+            {saved ? '✓ Saved' : 'Save Credentials'}
+          </button>
+          <button
+            onClick={runTest}
+            disabled={!configured || testing}
+            className="flex items-center gap-1.5 rounded-lg border border-apex-border px-4 py-2 text-xs font-medium text-apex-textMuted hover:text-apex-text transition-colors disabled:opacity-40"
+          >
+            {testing ? (
+              <><RefreshCw size={11} className="animate-spin" /> Testing…</>
+            ) : (
+              <><CheckCircle2 size={11} /> Test Connection</>
+            )}
+          </button>
+        </div>
+      </div>
+
+      {/* Test results */}
+      {testResult && (
+        <div className={cn(
+          'rounded-lg border p-3 space-y-2',
+          testResult.ok
+            ? 'border-apex-success/30 bg-apex-success/5'
+            : 'border-apex-danger/30 bg-apex-danger/5'
+        )}>
+          <p className={cn(
+            'text-xs font-semibold flex items-center gap-1.5',
+            testResult.ok ? 'text-apex-success' : 'text-apex-danger'
+          )}>
+            {testResult.ok
+              ? <><CheckCircle2 size={12} /> Connected — Supabase responding</>
+              : <><AlertTriangle size={12} /> {testResult.error ?? 'Connection failed'}</>
+            }
+          </p>
+          {testResult.tables.length > 0 && (
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+              {testResult.tables.map((t) => (
+                <div key={t.name} className={cn(
+                  'flex items-center gap-1.5 rounded px-2 py-1 text-[10px] font-mono',
+                  t.reachable
+                    ? 'bg-apex-success/10 text-apex-success'
+                    : 'bg-apex-danger/10 text-apex-danger'
+                )}>
+                  {t.reachable
+                    ? <CheckCircle2 size={9} />
+                    : <AlertTriangle size={9} />
+                  }
+                  {t.name}
+                </div>
+              ))}
+            </div>
+          )}
+          {testResult.ok && (
+            <p className="text-[10px] text-apex-textMuted">
+              Realtime subscriptions for jobs, job_assignments, telemetry, and alerts will activate on next page load.
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Required tables reference */}
+      <div className="rounded-lg border border-apex-border bg-apex-surface px-3 py-2.5">
+        <p className="text-[10px] font-semibold uppercase tracking-wider text-apex-textMuted mb-2">
+          Required Supabase Tables
+        </p>
+        <div className="flex flex-wrap gap-1.5">
+          {TABLE_NAMES.map((t) => (
+            <span key={t} className="font-mono text-[10px] rounded bg-apex-border/40 px-1.5 py-0.5 text-apex-textDim">
+              {t}
+            </span>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+// ─────────────────────────────────────────────────────────────────
 // MAIN SETTINGS PAGE
 // ─────────────────────────────────────────────────────────────────
 
@@ -345,6 +541,9 @@ export default function SettingsPage() {
 
       {/* ── DEPLOYMENT SOURCE TOGGLE ── */}
       <DeploymentSourcePanel />
+
+      {/* ── SUPABASE INTEGRATION ── */}
+      <SupabaseCredentialsPanel />
 
       {/* ── STORAGE HEALTH ── */}
       <div className="rounded-xl border border-apex-border bg-apex-card p-5">

@@ -601,6 +601,10 @@ export const ConfigStore = {
       // Deployment Source Mode — controls deploymentProvider.ts routing
       // 'simulation' = local generated data | 'live' = real AP3X dashboards
       deploymentMode: 'simulation',
+      // Supabase integration credentials (set via Settings → Supabase panel)
+      // When present, supabaseDataService.ts uses these for all table ops
+      supabaseUrl: '',
+      supabaseAnonKey: '',
     };
   },
   set(config) { lsSet('system_config', config); },
