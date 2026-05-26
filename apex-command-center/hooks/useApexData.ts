@@ -67,7 +67,12 @@ export function useApexData() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [
+    setTenants, setFleets, setTelemetryEvents, setAIMetrics,
+    setAPIUsageLogs, setRouteMetrics, setOperationalMetrics,
+    setDeploymentLogs, setFinancialEvents, setInfraMetrics,
+    setLoading, computeGlobalAggregate, computeSustainability,
+  ]);
 
   useEffect(() => {
     if (initialized.current) return;
@@ -103,9 +108,7 @@ export function useApexData() {
     }, 30000);
 
     return () => clearInterval(refreshInterval);
-  }, []);
-
-  return { reload: loadAll };
+  }, [loadAll, appendLiveFeedEvent, addAlert]);
 }
 
 export default useApexData;

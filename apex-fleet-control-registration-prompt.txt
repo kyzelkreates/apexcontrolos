@@ -1,0 +1,319 @@
+================================================================================
+  APEX FLEET CONTROL OS — REGISTRATION CODE SYSTEM UPGRADE
+  Build Prompt for External Build Environment
+  Version: 1.0 | Date: 2026-05-20
+================================================================================
+
+OVERVIEW
+--------
+Replace the existing registration/federation system in Apex Fleet Control OS
+with one that matches the Apex Command Center OS pairing protocol exactly.
+The Fleet Control OS must generate registration codes in the correct format,
+display them in the Federation/Settings UI, and connect to the Apex Command
+Center OS so it can be discovered, paired, and managed from there.
+
+DO NOT rewrite unrelated modules. Touch only what is specified below.
+Follow the existing architecture — local-first, IndexedDB/localStorage SSOT.
+
+
+================================================================================
+SECTION 1 — REGISTRATION CODE FORMAT
+================================================================================
+
+The Fleet Control OS must generate pairing codes in this EXACT format:
+
+    APEX-{8 HEX CHARS}-{4 HEX CHARS}-FC
+
+Examples:
+    APEX-3A7F2C1B-9D4E-FC
+    APEX-A0B1C2D3-E4F5-FC
+
+Rules:
+  - All characters UPPERCASE
+  - Hex chars are from: A B C D E F 0 1 2 3 4 5 6 7 8 9
+  - The suffix is always "FC" (Fleet Control) — never change this
+  - Each new code must be generated using UUID v4 source (first 8 hex chars,
+    then next 4 hex chars, strip dashes, uppercase)
+  - Codes expire after 1 hour from generation
+  - Max 5 validation attempts per code before it locks
+
+Code generation function (implement this exactly):
+
+    function generatePairingCode(): string {
+      const a = crypto.randomUUID().replace(/-/g, '').substring(0, 8).toUpperCase();
+      const b = crypto.randomUUID().replace(/-/g, '').substring(0, 4).toUpperCase();
+      return `APEX-${a}-${b}-FC`;
+    }
+
+Validation regex (for when Apex Command Center validates the code):
+
+    /^APEX-[A-F0-9]{8}-[A-F0-9]{4}-[A-Z]{2,4}$/
+
+The suffix "FC" passes this regex. Do not change the regex — it lives in
+Apex Command Center OS. Fleet Control only needs to GENERATE codes that match.
+
+
+================================================================================
+SECTION 2 — WHERE TO IMPLEMENT IN FLEET CONTROL OS
+================================================================================
+
+Create or update a pairing module at:
+
+    lib/federation-engine.ts   (or equivalent pairing/registration lib)
+
+It must export:
+
+    generatePairingCode(): string
+      — Returns a fresh APEX-XXXXXXXX-XXXX-FC code
+
+    getActivePairingCode(): Promise<{ code: string; expiresAt: number } | null>
+      — Returns the current stored code from IndexedDB/localStorage if not expired
+      — Returns null if no code or expired
+
+    refreshPairingCode(): Promise<{ code: string; expiresAt: number }>
+      — Generates a new code, stores it, returns it
+      — Replaces any existing code
+
+    markAsRegistered(tenantId: string, fleetId: string, pairingToken: string): Promise<void>
+      — Called when Apex Command Center completes pairing
+      — Saves tenantId, fleetId, pairingToken to persistent storage
+      — Sets pairing status to 'registered'
+
+    getPairingStatus(): Promise<'unregistered' | 'pending' | 'registered'>
+      — Returns current connection state
+
+    getRegisteredIdentity(): Promise<{ tenantId: string; fleetId: string; pairingToken: string } | null>
+      — Returns the saved identity after successful pairing
+
+Storage keys to use (localStorage or your existing SSOT):
+
+    apex_fc_pairing_code        — the current APEX-...-FC code string
+    apex_fc_pairing_expires_at  — expiry timestamp (ms)
+    apex_fc_pairing_status      — 'unregistered' | 'pending' | 'registered'
+    apex_fc_tenant_id           — assigned after pairing
+    apex_fc_fleet_id            — assigned after pairing
+    apex_fc_pairing_token       — assigned after pairing
+    apex_fc_command_center_url  — URL of the paired Apex Command Center instance
+
+
+================================================================================
+SECTION 3 — FEDERATION / SETTINGS UI
+================================================================================
+
+Add or update a Federation page (Settings → Federation or dedicated route).
+The UI must look and feel like the Apex Command Center card style:
+dark background, monospace code display, copy button, regenerate button.
+
+Required UI elements:
+
+1. CONNECTION STATUS BAR
+   - If status === 'registered': green pulse dot + "Connected to Apex Command Center"
+   - If status === 'pending':    amber pulse dot + "Awaiting pairing in Command Center"
+   - If status === 'unregistered': grey dot + "Not yet registered"
+
+2. REGISTRATION CODE CARD (shown when status is NOT 'registered')
+   - Label: "REGISTRATION CODE" (small caps)
+   - Large monospace display of the code with letter-spacing:
+       A P E X - 3 A 7 F 2 C 1 B - 9 D 4 E - F C
+   - Below the code: "Enter this code in Apex Command Center → Tenants → Register Fleet"
+   - Expiry countdown: "Expires in XX:XX" (live countdown from expiresAt)
+   - Two buttons: [Copy Code]  [Regenerate]
+   - On regenerate: confirm dialog "Generate a new code? The current one will be invalidated."
+
+3. IDENTITY PANEL (shown when status === 'registered')
+   - Tenant ID row with copy button
+   - Fleet Entity ID row with copy button
+   - Pairing Token row with copy button
+   - Command Center URL row
+   - Connected Since timestamp
+   - Button: [Disconnect] — clears all apex_fc_* keys and resets to unregistered
+
+4. HOW TO PAIR — instruction steps (collapsible):
+   Step 1: Copy your registration code above
+   Step 2: Open Apex Command Center OS
+   Step 3: Go to Tenants → Register Fleet
+   Step 4: Paste your code and complete the fleet details form
+   Step 5: Your fleet will appear as Connected here automatically
+
+Auto-refresh: poll getPairingStatus() every 10 seconds while status is 'pending',
+so the UI updates to 'registered' as soon as pairing completes in Command Center.
+
+
+================================================================================
+SECTION 4 — SENDING DATA TO APEX COMMAND CENTER
+================================================================================
+
+Once paired (status === 'registered'), Fleet Control OS must send data to
+Apex Command Center using these API endpoints on the Command Center's domain.
+
+The Command Center URL is stored in: apex_fc_command_center_url
+
+All requests must include these headers:
+    Content-Type: application/json
+    X-Tenant-Id: {tenantId from storage}
+    X-Fleet-Id:  {fleetId from storage}
+    X-Apex-Key:  {pairingToken from storage}
+
+---- ENDPOINT 1: Fleet Heartbeat ----
+POST {commandCenterUrl}/api/fleet-heartbeat
+
+Send every 30 seconds while the app is active.
+
+Payload:
+{
+  "tenantId":        string,   // from apex_fc_tenant_id
+  "fleetId":         string,   // from apex_fc_fleet_id
+  "vehicleCount":    number,   // total vehicles in fleet
+  "activeVehicles":  number,   // vehicles currently active/online
+  "driverCount":     number,   // total drivers
+  "activeDrivers":   number,   // drivers currently on shift
+  "uptimePercent":   number,   // fleet uptime % (0-100)
+  "version":         string,   // Fleet Control OS version e.g. "1.0.0"
+  "coordinates": {
+    "lat": number,
+    "lng": number
+  }
+}
+
+Expected response: { ok: true, serverTime: number, message: "Heartbeat received" }
+
+
+---- ENDPOINT 2: Telemetry Batch ----
+POST {commandCenterUrl}/api/telemetry/batch
+
+Send every 15 seconds if there are queued events.
+
+Payload:
+{
+  "batchId":   string,   // unique ID for this batch e.g. uuid
+  "tenantId":  string,
+  "fleetId":   string,
+  "events": [
+    {
+      "id":          string,
+      "eventType":   "fleet_update" | "vehicle_event" | "route_complete" |
+                     "ai_inference" | "api_call" | "error" | "alert" |
+                     "deployment" | "heartbeat",
+      "timestamp":   number,   // ms epoch
+      "tenantId":    string,
+      "fleetId":     string,
+      "vehicleId":   string | null,
+      "driverId":    string | null,
+      "severity":    "info" | "warning" | "critical",
+      "payload":     object,   // event-specific data
+      "processed":   false
+    }
+  ]
+}
+
+Expected response: { ok: true, batchId: string, accepted: number, serverTime: number }
+
+
+---- ENDPOINT 3: Route Complete ----
+POST {commandCenterUrl}/api/route-complete
+
+Send whenever a driver completes a route/delivery.
+
+Payload:
+{
+  "tenantId":                    string,
+  "fleetId":                     string,
+  "vehicleId":                   string,
+  "driverId":                    string,
+  "routeId":                     string,   // unique route ID
+  "distanceKm":                  number,
+  "durationMin":                 number,
+  "fuelSavedL":                  number,   // litres saved vs unoptimised route
+  "co2SavedKg":                  number,   // kg CO2 saved (if unknown: fuelSavedL * 2.68)
+  "fuelCostSavedUSD":            number,   // if unknown: fuelSavedL * 1.35
+  "optimisationSavingPercent":   number,   // % improvement from AI routing
+  "aiOptimised":                 boolean,
+  "onTimeDelivery":              boolean,
+  "stops":                       number
+}
+
+Expected response: { ok: true, routeId: string, serverTime: number, computed: { ... } }
+
+
+================================================================================
+SECTION 5 — PAIRING COMPLETION WEBHOOK (OPTIONAL ENHANCEMENT)
+================================================================================
+
+After the operator enters the Fleet Control registration code into Apex Command
+Center, Apex Command Center records the pairing and stores tenantId, fleetId,
+and pairingToken. To automatically notify Fleet Control OS that pairing is
+complete, implement a polling check:
+
+Every 10 seconds while status === 'pending', call:
+    GET {commandCenterUrl}/api/pairing-status?code={currentCode}
+
+If the response returns:
+    { paired: true, tenantId: "...", fleetId: "...", pairingToken: "..." }
+
+Then call markAsRegistered(tenantId, fleetId, pairingToken) and save
+commandCenterUrl to apex_fc_command_center_url.
+
+Note: This endpoint does not yet exist in Apex Command Center OS. If you want
+full auto-detection, add it there too. Alternatively, provide a manual "I've
+entered the code" button in Fleet Control OS that opens a modal for the operator
+to paste back the Tenant ID + Fleet ID + Pairing Token shown in Command Center
+after pairing completes (all three are displayed with copy buttons).
+
+
+================================================================================
+SECTION 6 — COMMAND CENTER URL CONFIGURATION
+================================================================================
+
+The Fleet Control OS needs to know where to send data. Add to your
+Settings/Federation UI:
+
+  - Input field: "Apex Command Center URL"
+  - Placeholder: "https://your-apex-cc.vercel.app"
+  - Saved to: apex_fc_command_center_url
+  - Validated: must start with https://, no trailing slash
+  - This URL is used as the base for all three API endpoints above
+
+Show a [Test Connection] button that pings:
+    GET {commandCenterUrl}/api/fleet-heartbeat (OPTIONS preflight)
+And displays "Connected" or "Unreachable" accordingly.
+
+
+================================================================================
+SECTION 7 — STRICT BUILD RULES
+================================================================================
+
+  1. DO NOT rewrite any existing telemetry, routing, or driver modules
+  2. DO NOT create a new IndexedDB database — use your existing SSOT storage
+  3. DO NOT add any new external dependencies — use crypto.randomUUID() (built-in)
+  4. Keep all state local-first — the API calls are fire-and-forget with retry
+  5. If an API call fails (network error), queue it and retry on next interval
+  6. All pairing data must survive page refresh — persist to localStorage/IndexedDB
+  7. The code format APEX-XXXXXXXX-XXXX-FC is fixed — do not change the suffix
+  8. No mock/demo data — all values come from real fleet state
+  9. Add loading states and error handling to all async operations in the UI
+  10. The Federation UI must work standalone (show the code even with no data yet)
+
+
+================================================================================
+SUMMARY — WHAT APEX COMMAND CENTER OS EXPECTS
+================================================================================
+
+When an operator opens Apex Command Center OS → Tenants → Register Fleet,
+they see a modal asking for a pairing code. They paste the code from Fleet
+Control OS. Apex Command Center:
+
+  1. Validates the format: /^APEX-[A-F0-9]{8}-[A-F0-9]{4}-[A-Z]{2,4}$/
+  2. Creates a Tenant record with the company details they fill in
+  3. Creates a Fleet Entity linked to that Tenant
+  4. Returns: { tenantId, fleetId, pairingToken }
+  5. Displays these three values with copy buttons
+
+The operator then pastes those three values back into Fleet Control OS
+(or Fleet Control polls automatically via the pairing-status endpoint).
+
+From that point on, Fleet Control OS uses tenantId + fleetId + pairingToken
+to authenticate all three API endpoints listed in Section 4.
+
+================================================================================
+END OF PROMPT
+================================================================================

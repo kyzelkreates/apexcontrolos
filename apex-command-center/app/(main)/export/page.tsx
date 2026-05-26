@@ -125,10 +125,10 @@ export default function ExportPage() {
   };
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-4 sm:space-y-6 animate-fade-in">
       <div className="flex items-start justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-apex-text">Export <span className="apex-gradient-text">Engine</span></h1>
+          <h1 className="text-xl sm:text-2xl font-bold text-apex-text">Export <span className="apex-gradient-text">Engine</span></h1>
           <p className="text-sm text-apex-textMuted mt-1">PDF reports · CSV exports · Tenant reports · Executive analytics</p>
         </div>
         <select
@@ -144,7 +144,7 @@ export default function ExportPage() {
       {/* Export Types */}
       <div>
         <SectionHeader title="Available Exports" subtitle="Click to generate and download" icon={FileDown} />
-        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
           {EXPORT_TYPES.map((type) => {
             const Icon = type.icon;
             const isRunning = running === type.id;
@@ -184,7 +184,7 @@ export default function ExportPage() {
       {/* Per-Tenant Reports */}
       <div>
         <SectionHeader title="Tenant Reports" subtitle="Individual PDF reports per connected tenant" icon={FileText} />
-        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {tenants.slice(0, 12).map((t) => (
             <div key={t.id} className="flex items-center justify-between rounded-xl border border-apex-border bg-apex-card px-4 py-3">
               <div className="min-w-0">

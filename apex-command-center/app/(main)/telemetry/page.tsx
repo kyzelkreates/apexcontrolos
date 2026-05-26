@@ -61,20 +61,20 @@ export default function TelemetryPage() {
   }, [telemetryEvents, tenants]);
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-4 sm:space-y-6 animate-fade-in">
       <div>
-        <h1 className="text-2xl font-bold text-apex-text">Telemetry <span className="apex-gradient-text">Ingestion</span></h1>
+        <h1 className="text-xl sm:text-2xl font-bold text-apex-text">Telemetry <span className="apex-gradient-text">Ingestion</span></h1>
         <p className="text-sm text-apex-textMuted mt-1">Batched ingestion · Queue monitoring · Delta-sync · Offline reconciliation</p>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-2 sm:grid-cols-2 lg:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <MetricCard title="Total Events" value={formatNumber(telemetryEvents.length)} icon={Database} variant="accent" loading={isLoading} />
         <MetricCard title="Processed" value={formatNumber(processed)} icon={CheckCircle2} variant="success" loading={isLoading} />
         <MetricCard title="Pending" value={formatNumber(unprocessed)} icon={AlertTriangle} variant={unprocessed > 100 ? 'warning' : 'default'} loading={isLoading} />
         <MetricCard title="Queue Depth" value={formatNumber(engineStats.queueDepth)} icon={Layers} variant={engineStats.queueDepth > 500 ? 'danger' : 'default'} loading={isLoading} />
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-2 sm:grid-cols-2 lg:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <MetricCard title="Processed (Engine)" value={formatNumber(engineStats.totalProcessed)} icon={CheckCircle2} variant="success" loading={isLoading} />
         <MetricCard title="Dropped" value={formatNumber(engineStats.totalDropped)} icon={AlertTriangle} variant={engineStats.totalDropped > 0 ? 'danger' : 'success'} loading={isLoading} />
         <MetricCard title="Batch Size" value={engineStats.config.batchSize} icon={Layers} variant="default" loading={isLoading} />
@@ -84,7 +84,7 @@ export default function TelemetryPage() {
       {/* Engine Status */}
       <div className="rounded-xl border border-apex-border bg-apex-card p-5">
         <SectionHeader title="Engine Status" subtitle="Telemetry ingestion engine health" icon={Activity} />
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mt-2">
+        <div className="grid grid-cols-2 lg:grid-cols-2 sm:grid-cols-2 lg:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mt-2">
           {[
             { label: 'Status', value: 'Running', color: 'text-apex-success' },
             { label: 'Flush Interval', value: `${engineStats.config.flushIntervalMs / 1000}s`, color: 'text-apex-textDim' },
@@ -100,7 +100,7 @@ export default function TelemetryPage() {
       </div>
 
       {/* Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
         <div className="rounded-xl border border-apex-border bg-apex-card p-5">
           <SectionHeader title="Events — 7 Days" subtitle="Daily ingestion volume" icon={Activity} />
           <ResponsiveContainer width="100%" height={200}>
@@ -137,7 +137,7 @@ export default function TelemetryPage() {
       {/* Event Types */}
       <div className="rounded-xl border border-apex-border bg-apex-card p-5">
         <SectionHeader title="Event Type Breakdown" subtitle="All ingested event categories" icon={Layers} />
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-2">
+        <div className="grid grid-cols-2 lg:grid-cols-2 lg:grid-cols-4 gap-3 mt-2">
           {byType.map((item, i) => (
             <div key={item.name} className="rounded-lg border border-apex-border/50 bg-apex-surface px-3 py-3">
               <p className="text-xs font-medium text-apex-textDim capitalize">{item.name}</p>
@@ -159,7 +159,7 @@ export default function TelemetryPage() {
       {/* Live Feed */}
       <div className="rounded-xl border border-apex-border bg-apex-card p-5">
         <SectionHeader title="Live Telemetry Feed" subtitle="Most recent in-session events" icon={Zap} />
-        <div className="space-y-1.5 max-h-64 overflow-y-auto mt-2 font-mono text-xs">
+        <div className="space-y-1.5 max-h-40 sm:h-48 sm:h-64 overflow-y-auto mt-2 font-mono text-xs">
           {liveFeed.length === 0 && (
             <p className="text-center text-apex-textMuted py-8">No live events in this session</p>
           )}

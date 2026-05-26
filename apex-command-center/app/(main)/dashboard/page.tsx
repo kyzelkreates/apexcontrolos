@@ -140,10 +140,10 @@ export default function DashboardPage() {
   };
 
   return (
-    <div className="space-y-8 animate-fade-in">
+    <div className="space-y-4 sm:space-y-6 md:space-y-8 animate-fade-in">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-apex-text">
+        <h1 className="text-xl sm:text-2xl font-bold text-apex-text">
           Global Federation <span className="apex-gradient-text">Overview</span>
         </h1>
         <p className="text-sm text-apex-textMuted mt-1">
@@ -160,7 +160,7 @@ export default function DashboardPage() {
       )}
 
       {/* KPI Row 1 — Fleet */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-2 sm:grid-cols-2 lg:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <MetricCard
           title="Active Tenants"
           value={formatNumber(globalAggregate?.activeTenants ?? 0)}
@@ -196,7 +196,7 @@ export default function DashboardPage() {
       </div>
 
       {/* KPI Row 2 — Performance */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-2 sm:grid-cols-2 lg:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <MetricCard
           title="Global Uptime"
           value={`${globalAggregate?.globalUptimePercent ?? 0}%`}
@@ -238,7 +238,7 @@ export default function DashboardPage() {
           <span className="text-sm font-semibold text-apex-text">Sustainability Impact</span>
           <span className="text-xs text-apex-textMuted">— last 30 days, all tenants</span>
         </div>
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
           <MetricCard
             title="Fuel Saved"
             value={`${formatNumber(globalAggregate?.totalFuelSavedL ?? 0)} L`}
@@ -330,7 +330,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Fuel + CO₂ Savings Trend */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
         <div className="rounded-xl border border-apex-border bg-apex-card p-5">
           <SectionHeader title="Fuel & CO₂ Saved" subtitle="14-day daily trend" icon={Fuel} />
           {routeMetrics.length === 0 ? (
@@ -380,7 +380,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Efficiency + AI Providers */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
         <div className="rounded-xl border border-apex-border bg-apex-card p-5">
           <SectionHeader title="Operational Efficiency" subtitle="7-day rolling average" icon={TrendingUp} />
           {operationalMetrics.length === 0 ? (

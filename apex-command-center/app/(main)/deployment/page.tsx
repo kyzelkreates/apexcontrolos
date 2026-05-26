@@ -98,13 +98,13 @@ export default function DeploymentPage() {
   ];
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-4 sm:space-y-6 animate-fade-in">
       <div>
-        <h1 className="text-2xl font-bold text-apex-text">Deployment <span className="apex-gradient-text">Control</span></h1>
+        <h1 className="text-xl sm:text-2xl font-bold text-apex-text">Deployment <span className="apex-gradient-text">Control</span></h1>
         <p className="text-sm text-apex-textMuted mt-1">Fleet rollouts · Version management · Rollback controls · Health monitoring</p>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-2 sm:grid-cols-2 lg:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <MetricCard title="Deployed" value={deployed} icon={CheckCircle2} variant="success" loading={isLoading} />
         <MetricCard title="Rolling Out" value={rolling_} icon={RefreshCw} variant="warning" loading={isLoading} />
         <MetricCard title="Failed" value={failed} icon={AlertTriangle} variant={failed > 0 ? 'danger' : 'success'} loading={isLoading} />
