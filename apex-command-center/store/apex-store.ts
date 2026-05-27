@@ -285,6 +285,7 @@ interface ApexStore {
   liveFeedMax: number;
 
   // Actions
+  _recompute: () => void;
   setTenants: (tenants: Tenant[]) => void;
   addTenant: (tenant: Tenant) => void;
   updateTenant: (id: string, patch: Partial<Tenant>) => void;
@@ -363,19 +364,35 @@ export const useApexStore = create<ApexStore>()(
       liveFeed: [],
       liveFeedMax: 100,
 
+      // ── Internal helper: recompute globalAggregate + sustainability after any fleet/tenant mutation ──
+      _recompute: () => {
+        const s = get();
+        const globalAggregate = computeAggregate(
+          s.tenants, s.fleets, s.aiMetrics, s.apiUsageLogs,
+          s.telemetryEvents, s.deploymentLogs, s.routeMetrics,
+          s.operationalMetrics, s.alerts,
+        );
+        const sustainability = computeSustainabilityByEntity(s.routeMetrics, s.tenants, s.fleets, 30);
+        set({ globalAggregate, sustainability });
+      },
+
       // Tenant
-      setTenants: (tenants) => set({ tenants }),
-      addTenant: (tenant) => set((s) => ({ tenants: [...s.tenants, tenant] })),
-      updateTenant: (id, patch) =>
-        set((s) => ({ tenants: s.tenants.map((t) => (t.id === id ? { ...t, ...patch } : t)) })),
-      removeTenant: (id) => set((s) => ({ tenants: s.tenants.filter((t) => t.id !== id) })),
+      setTenants: (tenants) => { set({ tenants }); get()._recompute(); },
+      addTenant: (tenant) => { set((s) => ({ tenants: [...s.tenants, tenant] })); get()._recompute(); },
+      updateTenant: (id, patch) => {
+        set((s) => ({ tenants: s.tenants.map((t) => (t.id === id ? { ...t, ...patch } : t)) }));
+        get()._recompute();
+      },
+      removeTenant: (id) => { set((s) => ({ tenants: s.tenants.filter((t) => t.id !== id) })); get()._recompute(); },
 
       // Fleet
-      setFleets: (fleets) => set({ fleets }),
-      addFleet: (fleet) => set((s) => ({ fleets: [...s.fleets, fleet] })),
-      updateFleet: (id, patch) =>
-        set((s) => ({ fleets: s.fleets.map((f) => (f.id === id ? { ...f, ...patch } : f)) })),
-        removeFleet: (id) => set((s) => ({ fleets: s.fleets.filter((f) => f.id !== id) })),
+      setFleets: (fleets) => { set({ fleets }); get()._recompute(); },
+      addFleet: (fleet) => { set((s) => ({ fleets: [...s.fleets, fleet] })); get()._recompute(); },
+      updateFleet: (id, patch) => {
+        set((s) => ({ fleets: s.fleets.map((f) => (f.id === id ? { ...f, ...patch } : f)) }));
+        get()._recompute();
+      },
+      removeFleet: (id) => { set((s) => ({ fleets: s.fleets.filter((f) => f.id !== id) })); get()._recompute(); },
 
       // Telemetry
       setTelemetryEvents: (telemetryEvents) => set({ telemetryEvents }),
