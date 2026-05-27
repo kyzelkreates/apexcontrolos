@@ -206,7 +206,7 @@ function DeploymentSourcePanel() {
             <> · {endpoints.filter((e) => e.enabled).length} endpoint{endpoints.filter((e) => e.enabled).length !== 1 ? 's' : ''} active</>
           )}
           {mode === 'live' && endpoints.filter((e) => e.enabled).length === 0 && (
-            <span className="text-apex-warning"> · No endpoints configured — using fallback simulation data</span>
+            <span className="text-apex-warning"> · No endpoints configured — no live data until endpoints are configured</span>
           )}
         </span>
       </div>
@@ -257,7 +257,7 @@ function DeploymentSourcePanel() {
           ) : (
             <div className="rounded-lg border border-dashed border-apex-border px-4 py-3 text-center">
               <p className="text-xs text-apex-textMuted">No endpoints configured. Add one below.</p>
-              <p className="text-[10px] text-apex-textMuted mt-0.5">System will use fallback simulation data until endpoints are added.</p>
+              <p className="text-[10px] text-apex-textMuted mt-0.5">System will show empty state until endpoints are configured.</p>
             </div>
           )}
 

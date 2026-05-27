@@ -278,7 +278,6 @@ interface ApexStore {
   mobileSidebarOpen: boolean;
   dateRange: { from: number; to: number };
   isLoading: boolean;
-  isSeeded: boolean;
 
   alerts: AppAlert[];
   liveFeed: TelemetryEvent[];
@@ -320,7 +319,6 @@ interface ApexStore {
   setMobileSidebarOpen: (open: boolean) => void;
   setDateRange: (range: { from: number; to: number }) => void;
   setLoading: (loading: boolean) => void;
-  setSeeded: (seeded: boolean) => void;
 
   addAlert: (alert: Omit<AppAlert, 'id' | 'createdAt' | 'dismissed'>) => void;
   dismissAlert: (id: string) => void;
@@ -359,7 +357,6 @@ export const useApexStore = create<ApexStore>()(
       mobileSidebarOpen: false,
       dateRange: { from: Date.now() - 86400000 * 30, to: Date.now() },
       isLoading: true,
-      isSeeded: false,
       alerts: [],
       liveFeed: [],
       liveFeedMax: 100,
@@ -442,7 +439,6 @@ export const useApexStore = create<ApexStore>()(
       setMobileSidebarOpen: (open) => set({ mobileSidebarOpen: open }),
       setDateRange: (range) => set({ dateRange: range }),
       setLoading: (isLoading) => set({ isLoading }),
-      setSeeded: (isSeeded) => set({ isSeeded }),
 
       // Alerts
       addAlert: (alert) =>

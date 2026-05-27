@@ -20,7 +20,6 @@ import {
   Unlink2, Ban, RotateCcw, Trash2, PowerOff, Power,
 } from 'lucide-react';
 import { formatNumber, timeAgo, regionLabel, cn } from '@/lib/utils';
-import { completePairing, initiatePairing, suspendTenant, reactivateTenant } from '@/lib/pairing-engine';
 import type { Tenant, FleetEntity, RegionCode } from '@/types';
 import { v4 as uuid } from 'uuid';
 import Storage from '@/storage/storage';

@@ -30,7 +30,7 @@ import Storage from '@/storage/storage';
 import { useApexStore } from '@/store/apex-store';
 import { startEngine, subscribeTelemetry } from '@/lib/telemetry-engine';
 import { resolveArray } from '@/core/dataResolver';
-import { DATA_MODE, ENABLE_FALLBACK } from '@/core/dataMode';
+import { DATA_MODE } from '@/core/dataMode';
 import { isSupabaseConfigured } from '@/lib/supabaseClient';
 import {
   fetchJobs, fetchJobAssignments, fetchVehicles, fetchProfiles,
@@ -39,17 +39,6 @@ import {
   type SupabaseTelemetry, type SupabaseAlert,
 } from '@/services/supabaseDataService';
 import type { TelemetryEvent } from '@/types';
-
-// Lazy-load seed so it's never bundled unless actually needed
-async function getMockSeed() {
-  if (!ENABLE_FALLBACK) return null;
-  try {
-    const mod = await import('@/lib/seed');
-    return mod.default;
-  } catch {
-    return null;
-  }
-}
 
 export function useApexData() {
   const initialized = useRef(false);
@@ -60,7 +49,7 @@ export function useApexData() {
     setAPIUsageLogs, setRouteMetrics, setOperationalMetrics,
     setDeploymentLogs, setFinancialEvents, setInfraMetrics,
     setLoading, computeGlobalAggregate, computeSustainability,
-    appendLiveFeedEvent, addAlert, setSeeded,
+    appendLiveFeedEvent, addAlert,
   } = useApexStore();
 
   // ─── Supabase → Zustand bridge: map raw Supabase records into alerts ────
@@ -207,62 +196,7 @@ export function useApexData() {
         Date.now() - 7 * 86400000, Date.now()
       );
 
-      // ── 2. Seed if DB empty and fallback allowed ───────────────────────
-      const dbIsEmpty = (liveTenants as unknown[]).length === 0;
-
-      // Track whether real data has ever existed — prevents re-seeding after intentional delete
-      if (!dbIsEmpty && typeof window !== 'undefined') {
-        localStorage.setItem('apex_cc_ever_had_data', '1');
-      }
-      const userHadData = typeof window !== 'undefined' && localStorage.getItem('apex_cc_ever_had_data') === '1';
-
-      if (dbIsEmpty && ENABLE_FALLBACK && !userHadData) {
-        const seedFn = await getMockSeed();
-        if (seedFn) {
-          try {
-            const result = await seedFn();
-            if (result.seeded) {
-              setSeeded(true);
-              const [st, sf, sai, sapi, sr, so, sd, sfin, sinf] = await Promise.all([
-                Storage.Tenants.getAll(),
-                Storage.Fleets.getAll(),
-                Storage.AIMetrics.getByTimeRange(Date.now() - 30 * 86400000, Date.now()),
-                Storage.APIUsage.getByTimeRange(Date.now() - 30 * 86400000, Date.now()),
-                Storage.Routes.getByTimeRange(Date.now() - 30 * 86400000, Date.now()),
-                Storage.Operations.getByTimeRange(Date.now() - 30 * 86400000, Date.now()),
-                Storage.Deployments.getAll(200),
-                Storage.Financial.getByTimeRange(Date.now() - 30 * 86400000, Date.now()),
-                Storage.Infra.getRecent(100),
-              ]);
-              const stelem = await Storage.Telemetry.getByTimeRange(
-                Date.now() - 7 * 86400000, Date.now()
-              );
-
-              setTenants(resolveArray(st, null, null, 'tenants') as Parameters<typeof setTenants>[0]);
-              setFleets(resolveArray(sf, null, null, 'fleets') as Parameters<typeof setFleets>[0]);
-              setTelemetryEvents(resolveArray(stelem, null, null, 'telemetry') as Parameters<typeof setTelemetryEvents>[0]);
-              setAIMetrics(resolveArray(sai, null, null, 'ai') as Parameters<typeof setAIMetrics>[0]);
-              setAPIUsageLogs(resolveArray(sapi, null, null, 'api') as Parameters<typeof setAPIUsageLogs>[0]);
-              setRouteMetrics(resolveArray(sr, null, null, 'routes') as Parameters<typeof setRouteMetrics>[0]);
-              setOperationalMetrics(resolveArray(so, null, null, 'ops') as Parameters<typeof setOperationalMetrics>[0]);
-              setDeploymentLogs(resolveArray(sd, null, null, 'deploy') as Parameters<typeof setDeploymentLogs>[0]);
-              setFinancialEvents(resolveArray(sfin, null, null, 'finance') as Parameters<typeof setFinancialEvents>[0]);
-              setInfraMetrics(resolveArray(sinf, null, null, 'infra') as Parameters<typeof setInfraMetrics>[0]);
-
-              computeGlobalAggregate();
-              computeSustainability(30);
-
-              // Still load Supabase on top of seeded data if configured
-              await loadSupabaseData();
-              return;
-            }
-          } catch (seedErr) {
-            console.warn('[Apex] Seed failed, continuing with empty state:', seedErr);
-          }
-        }
-      }
-
-      // ── 3. Hydrate store from IndexedDB ───────────────────────────────
+      // ── 2. Hydrate store from IndexedDB ───────────────────────────────
       setTenants(resolveArray(liveTenants, null, null, 'tenants') as Parameters<typeof setTenants>[0]);
       setFleets(resolveArray(liveFleets, null, null, 'fleets') as Parameters<typeof setFleets>[0]);
       setTelemetryEvents(resolveArray(liveTelemetry, null, null, 'telemetry') as Parameters<typeof setTelemetryEvents>[0]);
@@ -277,7 +211,7 @@ export function useApexData() {
       computeGlobalAggregate();
       computeSustainability(30);
 
-      if (dbIsEmpty && DATA_MODE === 'live') {
+      if ((liveTenants as unknown[]).length === 0) {
         addAlert({
           type: 'info',
           title: 'No Fleet Data Yet',
@@ -296,7 +230,7 @@ export function useApexData() {
     setAPIUsageLogs, setRouteMetrics, setOperationalMetrics,
     setDeploymentLogs, setFinancialEvents, setInfraMetrics,
     setLoading, computeGlobalAggregate, computeSustainability,
-    addAlert, setSeeded, loadSupabaseData,
+    addAlert, loadSupabaseData,
   ]);
 
   useEffect(() => {
