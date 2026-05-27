@@ -293,6 +293,7 @@ interface ApexStore {
   setFleets: (fleets: FleetEntity[]) => void;
   addFleet: (fleet: FleetEntity) => void;
   updateFleet: (id: string, patch: Partial<FleetEntity>) => void;
+  removeFleet: (id: string) => void;
 
   setTelemetryEvents: (events: TelemetryEvent[]) => void;
   appendLiveFeedEvent: (event: TelemetryEvent) => void;
@@ -374,6 +375,7 @@ export const useApexStore = create<ApexStore>()(
       addFleet: (fleet) => set((s) => ({ fleets: [...s.fleets, fleet] })),
       updateFleet: (id, patch) =>
         set((s) => ({ fleets: s.fleets.map((f) => (f.id === id ? { ...f, ...patch } : f)) })),
+        removeFleet: (id) => set((s) => ({ fleets: s.fleets.filter((f) => f.id !== id) })),
 
       // Telemetry
       setTelemetryEvents: (telemetryEvents) => set({ telemetryEvents }),
