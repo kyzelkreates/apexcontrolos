@@ -23,6 +23,7 @@ import { formatNumber, timeAgo, regionLabel, cn } from '@/lib/utils';
 import { completePairing, initiatePairing, suspendTenant, reactivateTenant } from '@/lib/pairing-engine';
 import type { Tenant, FleetEntity, RegionCode } from '@/types';
 import { v4 as uuid } from 'uuid';
+import Storage from '@/storage/storage';
 
 // ── Copy-to-clipboard hook ────────────────────────────────────────────────────
 function useCopy(timeout = 1800) {
@@ -129,6 +130,11 @@ function AddFleetModal({ onClose }: { onClose: () => void }) {
       tags: [form.region, form.plan],
     };
 
+    // Persist to IndexedDB first, then update Zustand store
+    await Promise.all([
+      Storage.Tenants.save(tenant),
+      Storage.Fleets.save(fleet),
+    ]);
     addTenant(tenant);
     addFleet(fleet);
     addAlert({
@@ -681,24 +687,42 @@ export default function TenantsPage() {
   const hasData = tenants.length > 0;
 
   // ── Actions ────────────────────────────────────────────────────────────────
-  const handleActivate = useCallback((tenant: Tenant) => {
+  const handleActivate = useCallback(async (tenant: Tenant) => {
     const fleet = getFleet(tenant.id);
-    updateTenant(tenant.id, { status: 'active', updatedAt: Date.now() });
-    if (fleet) updateFleet(fleet.id, { status: 'online', activeVehicles: Math.floor(fleet.vehicleCount * 0.8), activeDrivers: Math.floor(fleet.driverCount * 0.75), updatedAt: Date.now() });
+    const now = Date.now();
+    const tenantPatch = { status: 'active' as const, updatedAt: now };
+    const fleetPatch = fleet ? { status: 'online' as const, activeVehicles: Math.floor(fleet.vehicleCount * 0.8), activeDrivers: Math.floor(fleet.driverCount * 0.75), updatedAt: now } : null;
+    // Write through to IndexedDB
+    await Storage.Tenants.save({ ...tenant, ...tenantPatch });
+    if (fleet && fleetPatch) await Storage.Fleets.save({ ...fleet, ...fleetPatch });
+    // Update Zustand
+    updateTenant(tenant.id, tenantPatch);
+    if (fleet && fleetPatch) updateFleet(fleet.id, fleetPatch);
     addAlert({ type: 'success', title: 'Tenant Activated', message: `${tenant.name} is now active.` });
-    if (selectedTenant?.id === tenant.id) setSelectedTenant({ ...tenant, status: 'active' });
+    if (selectedTenant?.id === tenant.id) setSelectedTenant({ ...tenant, ...tenantPatch });
   }, [fleets, updateTenant, updateFleet, addAlert, selectedTenant]);
 
-  const handleDeactivate = useCallback((tenant: Tenant) => {
+  const handleDeactivate = useCallback(async (tenant: Tenant) => {
     const fleet = getFleet(tenant.id);
-    updateTenant(tenant.id, { status: 'suspended', updatedAt: Date.now() });
-    if (fleet) updateFleet(fleet.id, { status: 'offline', activeVehicles: 0, activeDrivers: 0, uptimePercent: 0, updatedAt: Date.now() });
+    const now = Date.now();
+    const tenantPatch = { status: 'suspended' as const, updatedAt: now };
+    const fleetPatch = fleet ? { status: 'offline' as const, activeVehicles: 0, activeDrivers: 0, uptimePercent: 0, updatedAt: now } : null;
+    // Write through to IndexedDB
+    await Storage.Tenants.save({ ...tenant, ...tenantPatch });
+    if (fleet && fleetPatch) await Storage.Fleets.save({ ...fleet, ...fleetPatch });
+    // Update Zustand
+    updateTenant(tenant.id, tenantPatch);
+    if (fleet && fleetPatch) updateFleet(fleet.id, fleetPatch);
     addAlert({ type: 'warning', title: 'Tenant Suspended', message: `${tenant.name} has been deactivated.` });
-    if (selectedTenant?.id === tenant.id) setSelectedTenant({ ...tenant, status: 'suspended' });
+    if (selectedTenant?.id === tenant.id) setSelectedTenant({ ...tenant, ...tenantPatch });
   }, [fleets, updateTenant, updateFleet, addAlert, selectedTenant]);
 
-  const handleDelete = useCallback((tenant: Tenant) => {
+  const handleDelete = useCallback(async (tenant: Tenant) => {
     const fleet = getFleet(tenant.id);
+    // Delete from IndexedDB first — this is the source of truth
+    await Storage.Tenants.delete(tenant.id);
+    if (fleet) await Storage.Fleets.delete(fleet.id);
+    // Remove from Zustand store (in-memory)
     removeTenant(tenant.id);
     if (fleet) removeFleet(fleet.id);
     addAlert({ type: 'info', title: 'Fleet Removed', message: `${tenant.name} has been deleted from the registry.` });

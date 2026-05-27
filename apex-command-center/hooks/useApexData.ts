@@ -210,7 +210,13 @@ export function useApexData() {
       // ── 2. Seed if DB empty and fallback allowed ───────────────────────
       const dbIsEmpty = (liveTenants as unknown[]).length === 0;
 
-      if (dbIsEmpty && ENABLE_FALLBACK) {
+      // Track whether real data has ever existed — prevents re-seeding after intentional delete
+      if (!dbIsEmpty && typeof window !== 'undefined') {
+        localStorage.setItem('apex_cc_ever_had_data', '1');
+      }
+      const userHadData = typeof window !== 'undefined' && localStorage.getItem('apex_cc_ever_had_data') === '1';
+
+      if (dbIsEmpty && ENABLE_FALLBACK && !userHadData) {
         const seedFn = await getMockSeed();
         if (seedFn) {
           try {
