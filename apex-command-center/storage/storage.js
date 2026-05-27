@@ -685,6 +685,49 @@ export const StorageHealth = {
   },
 };
 
+
+// ============================================================
+// NUCLEAR WIPE — clears ALL IndexedDB stores + ALL localStorage keys
+// Use this to fully reset the app to a clean state.
+// ============================================================
+
+export async function wipeAllData() {
+  // 1. Clear every IndexedDB object store
+  try {
+    const db = await openDB();
+    if (db) {
+      const storeNames = Object.values(STORES);
+      await Promise.all(storeNames.map((storeName) => {
+        return new Promise((resolve) => {
+          try {
+            const tx = db.transaction(storeName, 'readwrite');
+            const req = tx.objectStore(storeName).clear();
+            req.onsuccess = () => resolve(true);
+            req.onerror = () => resolve(false);
+          } catch {
+            resolve(false);
+          }
+        });
+      }));
+    }
+  } catch (e) {
+    console.warn('[ApexStorage] wipeAllData: IndexedDB clear failed:', e);
+  }
+
+  // 2. Wipe ALL apex_cc_* localStorage keys
+  if (typeof localStorage !== 'undefined') {
+    const keysToRemove = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith('apex_cc_')) keysToRemove.push(k);
+    }
+    keysToRemove.forEach((k) => localStorage.removeItem(k));
+
+    // Also remove the seed guard key we added previously
+    localStorage.removeItem('apex_cc_ever_had_data');
+  }
+}
+
 // ============================================================
 // GLOBAL STORAGE NAMESPACE (convenience export)
 // ============================================================
@@ -708,6 +751,7 @@ const Storage = {
   Alerts: AlertStore,
   Audit: AuditStore,
   Health: StorageHealth,
+  wipeAllData,
 };
 
 export default Storage;

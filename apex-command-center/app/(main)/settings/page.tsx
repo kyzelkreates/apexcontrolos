@@ -8,7 +8,7 @@ import {
   CheckCircle2, AlertTriangle, Radio, Wifi, WifiOff,
   PlusCircle, Trash, Globe, Lock,
 } from 'lucide-react';
-import Storage from '@/storage/storage';
+import Storage, { wipeAllData } from '@/storage/storage';
 import {
   getDeploymentMode, setDeploymentMode, getLiveEndpoints, saveLiveEndpoints,
   type DeploymentSourceMode, type LiveEndpoint,
@@ -503,6 +503,8 @@ export default function SettingsPage() {
   const [health, setHealth] = useState<Awaited<ReturnType<typeof Storage.Health.check>> | null>(null);
   const [storageEst, setStorageEst] = useState<{ usedMB: string; quotaMB: string; percentUsed: string } | null>(null);
   const [clearing, setClearing] = useState(false);
+  const [wiping, setWiping] = useState(false);
+  const [wipeConfirm, setWipeConfirm] = useState(false);
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
@@ -521,6 +523,14 @@ export default function SettingsPage() {
     const cutoff = Date.now() - 7 * 86400000;
     await Storage.Telemetry.pruneOlderThan(cutoff);
     setClearing(false);
+  };
+
+  const handleWipeAll = async () => {
+    if (!wipeConfirm) { setWipeConfirm(true); return; }
+    setWiping(true);
+    await wipeAllData();
+    // Small delay so stores finish clearing before reload
+    setTimeout(() => { window.location.reload(); }, 500);
   };
 
   const storeEntries = health
@@ -669,6 +679,24 @@ export default function SettingsPage() {
             >
               {clearing ? <RefreshCw size={12} className="animate-spin" /> : <Trash2 size={12} />}
               {clearing ? 'Pruning…' : 'Prune'}
+            </button>
+          </div>
+          <div className="flex items-center justify-between rounded-lg border border-apex-danger/40 bg-apex-danger/5 px-4 py-3">
+            <div>
+              <p className="text-sm font-medium text-apex-text">Wipe All Local Data</p>
+              <p className="text-xs text-apex-textMuted">Permanently clears all IndexedDB stores and localStorage. App reloads clean. Supabase data is untouched.</p>
+            </div>
+            <button
+              onClick={handleWipeAll}
+              disabled={wiping}
+              className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-50 ${
+                wipeConfirm
+                  ? 'border-apex-danger bg-apex-danger text-white hover:bg-apex-danger/80'
+                  : 'border-apex-danger/40 bg-apex-danger/10 text-apex-danger hover:bg-apex-danger/20'
+              }`}
+            >
+              {wiping ? <RefreshCw size={12} className="animate-spin" /> : <Trash2 size={12} />}
+              {wiping ? 'Wiping…' : wipeConfirm ? '⚠ Confirm — Wipe Everything' : 'Wipe All Data'}
             </button>
           </div>
         </div>
