@@ -4,6 +4,7 @@ import { cn } from '@/lib/utils';
 import {
   fetchTenantsWithFleets, registerFleetByCode,
   updateTenantStatus, deleteTenant,
+  validateCodeFormat, sanitizePairingCode,
 } from '@/services/federationService';
 import type { TenantWithFleets, TenantPlan } from '@/types/federation';
 import { StatusBadge } from '@/components/shared/StatusBadge';
@@ -68,7 +69,7 @@ function RegisterFleetModal({ onClose, onRegistered }: { onClose: () => void; on
               <label className="block text-xs text-apex-textMuted mb-1.5">Registration Code</label>
               <input
                 value={form.code}
-                onChange={(e) => setForm({ ...form, code: e.target.value.toUpperCase() })}
+                onChange={(e) => setForm({ ...form, code: sanitizePairingCode(e.target.value) })}
                 className="w-full rounded-lg border border-apex-border bg-apex-surface px-3 py-2 font-mono text-sm text-apex-accent placeholder-apex-textMuted focus:border-apex-accent focus:outline-none tracking-widest"
                 placeholder="APEX-3A7F2C1B-9D4E-FC"
                 autoFocus
@@ -80,7 +81,7 @@ function RegisterFleetModal({ onClose, onRegistered }: { onClose: () => void; on
               <button
                 onClick={() => {
                   if (!form.code.trim()) { setError('Enter a code first.'); return; }
-                  if (!/^APEX-[A-F0-9]{8}-[A-F0-9]{4}-[A-Z]{2,4}$/.test(form.code.trim())) {
+                  if (!validateCodeFormat(form.code)) {
                     setError('Invalid code format. Expected: APEX-XXXXXXXX-XXXX-FC'); return;
                   }
                   setError(''); setStep('details');

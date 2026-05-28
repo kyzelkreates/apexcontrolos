@@ -24,10 +24,19 @@ const sb = () => getSupabaseClient();
 // PAIRING CODES
 // ─────────────────────────────────────────────────────────────────
 
-const PAIRING_REGEX = /^APEX-[A-F0-9]{8}-[A-F0-9]{4}-[A-Z]{2,4}$/;
+// Sanitize input: trim, strip all spaces, uppercase — THEN validate.
+// This handles display-formatted input like 'A P E X - D B A D 7 6 E 2 - A 4 2 5 - F C'.
+export function sanitizePairingCode(input: string): string {
+  return input
+    .trim()
+    .replace(/\s+/g, '')
+    .toUpperCase();
+}
+
+const PAIRING_REGEX = /^APEX-[A-Z0-9]{8}-[A-Z0-9]{4}-FC$/;
 
 export function validateCodeFormat(code: string): boolean {
-  return PAIRING_REGEX.test(code.trim().toUpperCase());
+  return PAIRING_REGEX.test(sanitizePairingCode(code));
 }
 
 /** Register a fleet by pairing code. Creates tenant + fleet + marks code used. */
