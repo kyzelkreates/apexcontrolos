@@ -7,17 +7,30 @@ import { useAP3XStore } from '@/store/ap3x-store';
 import {
   LayoutDashboard, ClipboardList, Users, Truck,
   Activity, Settings, ChevronLeft, ChevronRight, X,
-  Shield, Zap, Building2, Globe,
+  Shield, Zap, Building2, Globe, Brain,
+  FileText, PlayCircle, Server,
 } from 'lucide-react';
 
-const NAV = [
-  { label: 'Overview',   href: '/dashboard',    icon: LayoutDashboard },
-  { label: 'Tenants',    href: '/tenants',       icon: Building2,  badge: 'federation' },
-  { label: 'Tasks',      href: '/tasks',         icon: ClipboardList },
-  { label: 'Fleet',      href: '/fleet',         icon: Truck },
-  { label: 'Drivers',    href: '/drivers',       icon: Users },
-  { label: 'Live Feed',  href: '/live',          icon: Activity },
-  { label: 'Settings',   href: '/settings',      icon: Settings },
+// ── Nav sections ──────────────────────────────────────────────────
+const NAV_CORE = [
+  { label: 'Overview',    href: '/dashboard', icon: LayoutDashboard },
+  { label: 'Tasks',       href: '/tasks',     icon: ClipboardList },
+  { label: 'Fleet',       href: '/fleet',     icon: Truck },
+  { label: 'Drivers',     href: '/drivers',   icon: Users },
+  { label: 'Live Feed',   href: '/live',      icon: Activity },
+];
+
+const NAV_GOVERNANCE = [
+  { label: 'Decision Engine',   href: '/decision-engine',  icon: Brain,       badge: 'GOV' },
+  { label: 'Safety Metrics',    href: '/safety',           icon: Shield,      badge: 'GOV' },
+  { label: 'Audit & Governance',href: '/audit',            icon: FileText,    badge: 'GOV' },
+  { label: 'Incident Replay',   href: '/incident-replay',  icon: PlayCircle,  badge: 'GOV' },
+  { label: 'System Health',     href: '/system-health',    icon: Server,      badge: 'GOV' },
+];
+
+const NAV_SYSTEM = [
+  { label: 'Tenants',   href: '/tenants',  icon: Building2 },
+  { label: 'Settings',  href: '/settings', icon: Settings },
 ];
 
 export function AP3XSidebar() {
@@ -28,23 +41,75 @@ export function AP3XSidebar() {
     alerts, tasks, drivers,
   } = useAP3XStore();
 
-  const activeAlerts = alerts.filter((a) => !a.dismissed).length;
-  const pendingTasks = tasks.filter((t) => t.status === 'pending').length;
+  const activeAlerts  = alerts.filter((a) => !a.dismissed).length;
+  const pendingTasks  = tasks.filter((t) => t.status === 'pending').length;
   const onlineDrivers = drivers.filter((d) => d.status !== 'offline').length;
 
+  // Close mobile sidebar on navigation
   useEffect(() => { setMobileSidebarOpen(false); }, [pathname, setMobileSidebarOpen]);
+
+  const NavSection = ({
+    label, items, mobile,
+  }: {
+    label?: string;
+    items: { label: string; href: string; icon: React.ElementType; badge?: string }[];
+    mobile: boolean;
+  }) => (
+    <div>
+      {label && (mobile || !sidebarCollapsed) && (
+        <p className="px-3 pt-3 pb-1 text-[9px] font-bold uppercase tracking-widest text-apex-textMuted/60">
+          {label}
+        </p>
+      )}
+      {!label && !sidebarCollapsed && <div className="mx-3 my-1 border-t border-apex-border/50" />}
+      {items.map((item) => {
+        const Icon     = item.icon;
+        const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
+        return (
+          <Link
+            key={item.href}
+            href={item.href}
+            className={cn(
+              'flex items-center gap-3 rounded-lg mx-1 px-3 py-2 text-sm font-medium transition-all duration-150',
+              isActive
+                ? 'bg-apex-accent/10 text-apex-accent border border-apex-accent/20'
+                : 'text-apex-textMuted hover:bg-apex-border/30 hover:text-apex-text border border-transparent'
+            )}
+            title={(!mobile && sidebarCollapsed) ? item.label : undefined}
+          >
+            <Icon size={15} className={cn('flex-shrink-0', isActive ? 'text-apex-accent' : '')} />
+            {(mobile || !sidebarCollapsed) && (
+              <>
+                <span className="flex-1 truncate text-xs">{item.label}</span>
+                {item.badge && (
+                  <span className={cn(
+                    'ml-auto rounded-full px-1.5 py-0.5 text-[8px] font-bold flex-shrink-0',
+                    item.badge === 'GOV'
+                      ? 'bg-apex-purple/20 text-apex-purple border border-apex-purple/30'
+                      : 'bg-apex-accent/20 text-apex-accent border border-apex-accent/30'
+                  )}>
+                    {item.badge}
+                  </span>
+                )}
+              </>
+            )}
+          </Link>
+        );
+      })}
+    </div>
+  );
 
   const NavContent = ({ mobile = false }: { mobile?: boolean }) => (
     <>
       {/* Logo */}
-      <div className="flex items-center gap-3 px-4 py-5 border-b border-apex-border flex-shrink-0">
+      <div className="flex items-center gap-3 px-4 py-4 border-b border-apex-border flex-shrink-0">
         <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-apex-accent/20 border border-apex-accent/40 text-apex-accent font-bold text-xs">
           A3
         </div>
         {(mobile || !sidebarCollapsed) && (
           <div className="min-w-0 flex-1">
-            <p className="text-xs font-bold text-apex-text leading-tight">AP3X CONTROL</p>
-            <p className="text-[10px] text-apex-textMuted leading-tight">Admin Dashboard</p>
+            <p className="text-xs font-bold text-apex-text leading-tight">AP3X CONTROL OS</p>
+            <p className="text-[9px] text-apex-textMuted leading-tight tracking-wide">Safety · Governance · Intelligence</p>
           </div>
         )}
         {mobile && (
@@ -56,15 +121,13 @@ export function AP3XSidebar() {
 
       {/* Quick stats */}
       {(mobile || !sidebarCollapsed) && (
-        <div className="mx-3 my-3 rounded-lg bg-apex-bg border border-apex-border/50 px-3 py-2 space-y-1.5 flex-shrink-0">
+        <div className="mx-3 my-2 rounded-lg bg-apex-bg border border-apex-border/50 px-3 py-2 space-y-1 flex-shrink-0">
           <div className="flex items-center justify-between text-[10px] text-apex-textMuted">
-            <span className="flex items-center gap-1">
-              <Globe size={9} className="text-apex-accent" /> Federation
-            </span>
-            <span className="font-mono text-apex-success">{onlineDrivers} drivers live</span>
+            <span className="flex items-center gap-1"><Globe size={9} className="text-apex-accent" /> Live Drivers</span>
+            <span className="font-mono text-apex-success">{onlineDrivers}</span>
           </div>
           <div className="flex items-center justify-between text-[10px] text-apex-textMuted">
-            <span className="flex items-center gap-1"><Zap size={9} /> Pending Tasks</span>
+            <span className="flex items-center gap-1"><Zap size={9}/> Pending Tasks</span>
             <span className={cn('font-mono', pendingTasks > 0 ? 'text-apex-warning' : 'text-apex-textDim')}>
               {pendingTasks}
             </span>
@@ -79,41 +142,18 @@ export function AP3XSidebar() {
       )}
 
       {/* Nav */}
-      <nav className="flex-1 overflow-y-auto px-2 py-2 space-y-0.5">
-        {NAV.map((item) => {
-          const Icon = item.icon;
-          const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={cn(
-                'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-150',
-                isActive
-                  ? 'bg-apex-accent/10 text-apex-accent border border-apex-accent/20'
-                  : 'text-apex-textMuted hover:bg-apex-border/30 hover:text-apex-text border border-transparent'
-              )}
-              title={(!mobile && sidebarCollapsed) ? item.label : undefined}
-            >
-              <Icon size={16} className={cn('flex-shrink-0', isActive ? 'text-apex-accent' : '')} />
-              {(mobile || !sidebarCollapsed) && (
-                <span className="flex-1 truncate">{item.label}</span>
-              )}
-              {/* Federation badge */}
-              {(mobile || !sidebarCollapsed) && item.badge === 'federation' && (
-                <span className="ml-auto rounded-full bg-apex-accent/20 px-1.5 py-0.5 text-[9px] font-bold text-apex-accent">NEW</span>
-              )}
-            </Link>
-          );
-        })}
+      <nav className="flex-1 overflow-y-auto py-1 space-y-0">
+        <NavSection items={NAV_CORE} mobile={mobile} />
+        <NavSection label="Governance" items={NAV_GOVERNANCE} mobile={mobile} />
+        <NavSection items={NAV_SYSTEM} mobile={mobile} />
       </nav>
 
       {/* Footer */}
       {(mobile || !sidebarCollapsed) && (
-        <div className="border-t border-apex-border px-3 py-3 flex-shrink-0">
-          <div className="flex items-center gap-1.5 text-[10px] text-apex-textMuted">
-            <Shield size={9} className="text-apex-accent" />
-            <span>Admin access only</span>
+        <div className="border-t border-apex-border px-3 py-2.5 flex-shrink-0">
+          <div className="flex items-center gap-1.5 text-[9px] text-apex-textMuted">
+            <Shield size={9} className="text-apex-purple" />
+            <span>Safety Governance + Intelligence Layer</span>
           </div>
         </div>
       )}
@@ -132,16 +172,19 @@ export function AP3XSidebar() {
 
   return (
     <>
+      {/* Desktop sidebar */}
       <aside className={cn(
         'hidden md:flex flex-col bg-apex-surface border-r border-apex-border transition-all duration-300 flex-shrink-0',
-        sidebarCollapsed ? 'w-16' : 'w-60'
+        sidebarCollapsed ? 'w-16' : 'w-64'
       )}>
         <NavContent />
       </aside>
 
+      {/* Mobile overlay */}
       {mobileSidebarOpen && (
         <div className="fixed inset-0 z-40 bg-black/60 md:hidden" onClick={() => setMobileSidebarOpen(false)} />
       )}
+      {/* Mobile drawer */}
       <aside className={cn(
         'fixed inset-y-0 left-0 z-50 flex flex-col w-72 bg-apex-surface border-r border-apex-border transition-transform duration-300 md:hidden',
         mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full'
