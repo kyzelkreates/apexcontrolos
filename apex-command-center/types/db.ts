@@ -1,9 +1,13 @@
 /**
- * AP3X CONTROL DASHBOARD — DATABASE TYPES
- * Mirrors the LOCKED Supabase schema exactly.
+ * AP3X CONTROL DASHBOARD — LOCKED DATABASE TYPES
  *
- * Tables: profiles · tasks · drivers · vehicles · job_assignments · driver_locations
- * DO NOT add tables (no jobs, no trips, no custom systems)
+ * PERMITTED TABLES (read from contract):
+ *   profiles · tasks · drivers · vehicles
+ *   job_assignments · driver_locations
+ *   fleet_nodes · dashboard_events · settings
+ *
+ * DO NOT add, rename, or reinterpret any field or table.
+ * Supabase is the only source of truth.
  */
 
 // ─────────────────────────────────────────────────────────────────
@@ -19,9 +23,16 @@ export interface Profile {
 }
 
 // ─────────────────────────────────────────────────────────────────
-// tasks  (this is the job record — NOT the deprecated jobs table)
+// tasks
 // ─────────────────────────────────────────────────────────────────
-export type TaskStatus = 'pending' | 'assigned' | 'in_progress' | 'complete' | 'cancelled';
+export type TaskStatus =
+  | 'pending'
+  | 'assigned'
+  | 'accepted'
+  | 'in_progress'
+  | 'completed'
+  | 'cancelled';
+
 export type TaskPriority = 'low' | 'medium' | 'high' | 'critical';
 
 export interface Task {
@@ -32,7 +43,7 @@ export interface Task {
   priority: TaskPriority;
   location: string | null;
   notes: string | null;
-  created_by: string | null;   // profiles.id of the admin who created it
+  created_by: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -44,7 +55,7 @@ export type DriverStatus = 'available' | 'on_task' | 'offline' | 'break';
 
 export interface Driver {
   id: string;
-  profile_id: string | null;   // links to profiles.id
+  profile_id: string | null;
   name: string;
   phone: string | null;
   status: DriverStatus;
@@ -70,15 +81,20 @@ export interface Vehicle {
 }
 
 // ─────────────────────────────────────────────────────────────────
-// job_assignments  (READ-ONLY from admin — dispatch logic lives elsewhere)
+// job_assignments  — READ-ONLY from this app
 // ─────────────────────────────────────────────────────────────────
-export type AssignmentStatus = 'assigned' | 'accepted' | 'in_progress' | 'complete' | 'cancelled';
+export type AssignmentStatus =
+  | 'assigned'
+  | 'accepted'
+  | 'in_progress'
+  | 'complete'
+  | 'cancelled';
 
 export interface JobAssignment {
   id: string;
-  task_id: string;             // references tasks.id
-  driver_id: string;           // references drivers.id
-  vehicle_id: string;          // references vehicles.id
+  task_id: string;
+  driver_id: string;
+  vehicle_id: string;
   status: AssignmentStatus;
   assigned_at: string;
   updated_at: string | null;
@@ -86,7 +102,7 @@ export interface JobAssignment {
 }
 
 // ─────────────────────────────────────────────────────────────────
-// driver_locations  (READ-ONLY live location feed)
+// driver_locations  — READ-ONLY live location feed
 // ─────────────────────────────────────────────────────────────────
 export interface DriverLocation {
   id: string;
@@ -99,7 +115,68 @@ export interface DriverLocation {
 }
 
 // ─────────────────────────────────────────────────────────────────
-// Convenience: task with assignment + driver info (joined)
+// fleet_nodes  — READ-ONLY fleet infrastructure status
+// ─────────────────────────────────────────────────────────────────
+export type FleetNodeStatus = 'online' | 'degraded' | 'offline' | 'maintenance';
+export type FleetNodeType   = 'hub' | 'depot' | 'checkpoint' | 'relay' | string;
+
+export interface FleetNode {
+  id: string;
+  name: string;
+  type: FleetNodeType;
+  status: FleetNodeStatus;
+  lat: number | null;
+  lng: number | null;
+  metadata: Record<string, unknown> | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// ─────────────────────────────────────────────────────────────────
+// dashboard_events  — READ-ONLY system event feed
+// ─────────────────────────────────────────────────────────────────
+export type DashboardEventSeverity = 'info' | 'warning' | 'critical';
+export type DashboardEventType =
+  | 'task_created'
+  | 'task_assigned'
+  | 'task_accepted'
+  | 'task_in_progress'
+  | 'task_completed'
+  | 'task_cancelled'
+  | 'driver_online'
+  | 'driver_offline'
+  | 'driver_on_task'
+  | 'vehicle_alert'
+  | 'fleet_node_alert'
+  | 'system'
+  | string;
+
+export interface DashboardEvent {
+  id: string;
+  event_type: DashboardEventType;
+  severity: DashboardEventSeverity;
+  title: string;
+  description: string | null;
+  entity_type: string | null;  // 'task' | 'driver' | 'vehicle' | 'fleet_node' etc.
+  entity_id: string | null;
+  metadata: Record<string, unknown> | null;
+  created_at: string;
+}
+
+// ─────────────────────────────────────────────────────────────────
+// settings  — READ/WRITE admin configuration
+// ─────────────────────────────────────────────────────────────────
+export interface SystemSetting {
+  id: string;
+  key: string;
+  value: string | null;
+  description: string | null;
+  updated_at: string;
+  updated_by: string | null;
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Convenience: task with joined assignment + driver + vehicle
 // ─────────────────────────────────────────────────────────────────
 export interface TaskWithAssignment extends Task {
   assignment: JobAssignment | null;

@@ -1,10 +1,15 @@
 /**
- * AP3X CONTROL DASHBOARD — DATA BOOTSTRAP HOOK
+ * AP3X CONTROL DASHBOARD — DATA BOOTSTRAP + REALTIME HOOK
  *
- * - Loads all data from Supabase on mount
- * - Subscribes to realtime on: tasks, drivers, driver_locations
- * - No mock data. No IndexedDB. No fallbacks.
- * - Supabase ALWAYS wins on conflict.
+ * Loads all permitted tables from Supabase on mount.
+ * Subscribes to realtime on:
+ *   tasks · drivers · job_assignments · driver_locations · dashboard_events
+ *
+ * Rules:
+ *   - No mock data
+ *   - No IndexedDB or localStorage fallbacks
+ *   - Supabase ALWAYS overwrites local state
+ *   - UI never pushes state into Supabase (except via explicit service calls)
  */
 
 'use client';
@@ -12,77 +17,72 @@ import { useEffect, useRef } from 'react';
 import { useAP3XStore } from '@/store/ap3x-store';
 import { getSupabaseClient, isSupabaseConfigured } from '@/lib/supabaseClient';
 import {
-  fetchTasks,
-  fetchTasksWithAssignments,
-  fetchDrivers,
-  fetchVehicles,
-  fetchJobAssignments,
-  fetchDriverLocations,
-  fetchProfiles,
+  fetchTasks, fetchTasksWithAssignments, fetchDrivers, fetchVehicles,
+  fetchJobAssignments, fetchDriverLocations, fetchProfiles,
+  fetchFleetNodes, fetchDashboardEvents, fetchSettings,
 } from '@/services/ap3xDataService';
-import type { Task, Driver, DriverLocation } from '@/types/db';
+import type { Task, Driver, DriverLocation, JobAssignment, DashboardEvent } from '@/types/db';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 
 export function useAP3XData() {
-  const {
-    setTasks, setTasksWithAssignments, setDrivers, setVehicles,
-    setAssignments, setDriverLocations, setProfiles,
-    setLoading, setConfigured, addAlert,
-    upsertTask, removeTask, upsertDriver, upsertDriverLocation,
-  } = useAP3XStore();
-
+  const store = useAP3XStore();
   const channelsRef = useRef<RealtimeChannel[]>([]);
-  const loadedRef = useRef(false);
+  const bootstrappedRef = useRef(false);
 
   useEffect(() => {
-    if (loadedRef.current) return;
-    loadedRef.current = true;
+    if (bootstrappedRef.current) return;
+    bootstrappedRef.current = true;
 
     const configured = isSupabaseConfigured();
-    setConfigured(configured);
+    store.setConfigured(configured);
 
     if (!configured) {
-      setLoading(false);
-      addAlert({
+      store.setLoading(false);
+      store.addAlert({
         type: 'warning',
         title: 'Supabase Not Configured',
-        message: 'Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in your environment to connect.',
+        message: 'Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY to connect.',
       });
       return;
     }
 
-    async function loadAll() {
-      setLoading(true);
+    async function bootstrap() {
+      store.setLoading(true);
       try {
-        // Load everything in parallel
-        const [tasksWithAssign, tasks, drivers, vehicles, assignments, locations, profiles] =
-          await Promise.all([
-            fetchTasksWithAssignments(),
-            fetchTasks(),
-            fetchDrivers(),
-            fetchVehicles(),
-            fetchJobAssignments(),
-            fetchDriverLocations(),
-            fetchProfiles(),
-          ]);
+        const [
+          tasksWithAssign, tasks, drivers, vehicles,
+          assignments, locations, profiles,
+          fleetNodes, events, settings,
+        ] = await Promise.all([
+          fetchTasksWithAssignments(),
+          fetchTasks(),
+          fetchDrivers(),
+          fetchVehicles(),
+          fetchJobAssignments(),
+          fetchDriverLocations(),
+          fetchProfiles(),
+          fetchFleetNodes(),
+          fetchDashboardEvents(),
+          fetchSettings(),
+        ]);
 
-        if (tasksWithAssign) setTasksWithAssignments(tasksWithAssign);
-        if (tasks) setTasks(tasks);
-        if (drivers) setDrivers(drivers);
-        if (vehicles) setVehicles(vehicles);
-        if (assignments) setAssignments(assignments);
-        if (locations) setDriverLocations(locations);
-        if (profiles) setProfiles(profiles);
-
+        if (tasksWithAssign) store.setTasksWithAssignments(tasksWithAssign);
+        if (tasks)           store.setTasks(tasks);
+        if (drivers)         store.setDrivers(drivers);
+        if (vehicles)        store.setVehicles(vehicles);
+        if (assignments)     store.setAssignments(assignments);
+        if (locations)       store.setDriverLocations(locations);
+        if (profiles)        store.setProfiles(profiles);
+        if (fleetNodes)      store.setFleetNodes(fleetNodes);
+        if (events)          store.setDashboardEvents(events);
+        if (settings)        store.setSettings(settings);
       } catch (e) {
-        console.error('[AP3X] loadAll failed:', e);
-        addAlert({ type: 'danger', title: 'Load Error', message: 'Failed to load data from Supabase.' });
+        console.error('[AP3X] bootstrap failed:', e);
+        store.addAlert({ type: 'danger', title: 'Load Error', message: 'Failed to load data from Supabase.' });
       } finally {
-        setLoading(false);
+        store.setLoading(false);
       }
     }
-
-    loadAll().then(() => subscribeRealtime());
 
     function subscribeRealtime() {
       const client = getSupabaseClient();
@@ -90,36 +90,50 @@ export function useAP3XData() {
 
       // ── tasks ──
       const tasksCh = client
-        .channel('ap3x-tasks')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, (payload) => {
-          if (payload.eventType === 'DELETE') {
-            removeTask(payload.old.id as string);
-          } else {
-            upsertTask(payload.new as Task);
-          }
+        .channel('ap3x:tasks')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, (p) => {
+          if (p.eventType === 'DELETE') store.removeTask(p.old.id as string);
+          else store.upsertTask(p.new as Task);
         })
         .subscribe();
 
       // ── drivers ──
       const driversCh = client
-        .channel('ap3x-drivers')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'drivers' }, (payload) => {
-          if (payload.eventType !== 'DELETE') {
-            upsertDriver(payload.new as Driver);
-          }
+        .channel('ap3x:drivers')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'drivers' }, (p) => {
+          if (p.eventType !== 'DELETE') store.upsertDriver(p.new as Driver);
+        })
+        .subscribe();
+
+      // ── job_assignments ──
+      const assignmentsCh = client
+        .channel('ap3x:job_assignments')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'job_assignments' }, (p) => {
+          if (p.eventType === 'DELETE') store.removeAssignment(p.old.id as string);
+          else store.upsertAssignment(p.new as JobAssignment);
         })
         .subscribe();
 
       // ── driver_locations ──
       const locationsCh = client
-        .channel('ap3x-driver-locations')
-        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'driver_locations' }, (payload) => {
-          upsertDriverLocation(payload.new as DriverLocation);
+        .channel('ap3x:driver_locations')
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'driver_locations' }, (p) => {
+          store.upsertDriverLocation(p.new as DriverLocation);
         })
         .subscribe();
 
-      channelsRef.current = [tasksCh, driversCh, locationsCh];
+      // ── dashboard_events ──
+      const eventsCh = client
+        .channel('ap3x:dashboard_events')
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'dashboard_events' }, (p) => {
+          store.prependDashboardEvent(p.new as DashboardEvent);
+        })
+        .subscribe();
+
+      channelsRef.current = [tasksCh, driversCh, assignmentsCh, locationsCh, eventsCh];
     }
+
+    bootstrap().then(() => subscribeRealtime());
 
     return () => {
       const client = getSupabaseClient();
@@ -127,8 +141,8 @@ export function useAP3XData() {
         try { client?.removeChannel(ch); } catch { /* noop */ }
       });
       channelsRef.current = [];
-      loadedRef.current = false;
+      bootstrappedRef.current = false;
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 }

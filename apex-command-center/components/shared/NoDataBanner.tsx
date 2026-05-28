@@ -1,46 +1,43 @@
-/**
- * APEX COMMAND CENTER OS
- * components/shared/NoDataBanner.tsx
- *
- * Shown at the top of data pages when no real fleet data has been
- * pushed from a connected Fleet Control dashboard or Driver app yet.
- * Disappears automatically once real data arrives.
- */
-
+'use client';
 import React from 'react';
-import { Wifi, ArrowRight } from 'lucide-react';
-import Link from 'next/link';
+import { AlertTriangle, Database } from 'lucide-react';
 
-interface NoDataBannerProps {
-  /** Page-specific label, e.g. "financial events", "fleet entities" */
-  dataLabel?: string;
-  /** Hide the banner — pass true once data exists */
-  hasData: boolean;
+interface Props {
+  reason: 'not_configured' | 'no_data' | 'error';
+  message?: string;
 }
 
-export function NoDataBanner({ hasData, dataLabel = 'live data' }: NoDataBannerProps) {
-  if (hasData) return null;
+export function NoDataBanner({ reason, message }: Props) {
+  const config = {
+    not_configured: {
+      icon: Database,
+      title: 'Supabase Not Configured',
+      body: message ?? 'Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in your Vercel environment to connect the dashboard.',
+      color: 'border-apex-warning/30 bg-apex-warning/5 text-apex-warning',
+    },
+    no_data: {
+      icon: Database,
+      title: 'No Data',
+      body: message ?? 'No records found in Supabase for this view.',
+      color: 'border-apex-border bg-apex-surface text-apex-textMuted',
+    },
+    error: {
+      icon: AlertTriangle,
+      title: 'Load Error',
+      body: message ?? 'Failed to load data from Supabase.',
+      color: 'border-apex-danger/30 bg-apex-danger/5 text-apex-danger',
+    },
+  }[reason];
+
+  const Icon = config.icon;
 
   return (
-    <div className="flex items-center gap-4 rounded-xl border border-apex-accent/30 bg-apex-accent/5 px-5 py-4">
-      <div className="flex-shrink-0 rounded-lg bg-apex-accent/10 p-2.5">
-        <Wifi size={18} className="text-apex-accent" />
+    <div className={`flex flex-col items-center justify-center gap-4 rounded-xl border p-12 text-center ${config.color}`}>
+      <Icon size={32} className="opacity-40" />
+      <div>
+        <p className="font-semibold text-sm">{config.title}</p>
+        <p className="text-xs mt-1 opacity-70 max-w-sm">{config.body}</p>
       </div>
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-semibold text-apex-text">
-          Awaiting {dataLabel} from connected fleet systems
-        </p>
-        <p className="text-xs text-apex-textMuted mt-0.5">
-          This page populates automatically once a Fleet Control dashboard or Driver app
-          begins pushing telemetry. Data is stored locally in IndexedDB — no cloud required.
-        </p>
-      </div>
-      <Link
-        href="/tenants"
-        className="flex-shrink-0 flex items-center gap-1.5 rounded-lg border border-apex-accent/40 bg-apex-accent/10 px-3 py-1.5 text-xs font-medium text-apex-accent hover:bg-apex-accent/20 transition-colors"
-      >
-        Register Fleet <ArrowRight size={12} />
-      </Link>
     </div>
   );
 }
