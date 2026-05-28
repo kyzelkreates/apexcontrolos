@@ -4,6 +4,7 @@
  * Loads all permitted tables from Supabase on mount.
  * Subscribes to realtime on:
  *   tasks · drivers · job_assignments · driver_locations · dashboard_events
+ *   pairing_codes  (federation sync)
  *
  * Rules:
  *   - No mock data
@@ -21,12 +22,16 @@ import {
   fetchJobAssignments, fetchDriverLocations, fetchProfiles,
   fetchFleetNodes, fetchDashboardEvents, fetchSettings,
 } from '@/services/ap3xDataService';
+import {
+  fetchPairingCodes, fetchTenantsWithFleets,
+} from '@/services/federationService';
 import type { Task, Driver, DriverLocation, JobAssignment, DashboardEvent } from '@/types/db';
+import type { PairingCode } from '@/types/federation';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 
 export function useAP3XData() {
   const store = useAP3XStore();
-  const channelsRef = useRef<RealtimeChannel[]>([]);
+  const channelsRef    = useRef<RealtimeChannel[]>([]);
   const bootstrappedRef = useRef(false);
 
   useEffect(() => {
@@ -39,8 +44,8 @@ export function useAP3XData() {
     if (!configured) {
       store.setLoading(false);
       store.addAlert({
-        type: 'warning',
-        title: 'Supabase Not Configured',
+        type:    'warning',
+        title:   'Supabase Not Configured',
         message: 'Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY to connect.',
       });
       return;
@@ -53,6 +58,7 @@ export function useAP3XData() {
           tasksWithAssign, tasks, drivers, vehicles,
           assignments, locations, profiles,
           fleetNodes, events, settings,
+          pairingCodes, tenantsWithFleets,
         ] = await Promise.all([
           fetchTasksWithAssignments(),
           fetchTasks(),
@@ -64,18 +70,22 @@ export function useAP3XData() {
           fetchFleetNodes(),
           fetchDashboardEvents(),
           fetchSettings(),
+          fetchPairingCodes({ limit: 200 }),
+          fetchTenantsWithFleets(),
         ]);
 
-        if (tasksWithAssign) store.setTasksWithAssignments(tasksWithAssign);
-        if (tasks)           store.setTasks(tasks);
-        if (drivers)         store.setDrivers(drivers);
-        if (vehicles)        store.setVehicles(vehicles);
-        if (assignments)     store.setAssignments(assignments);
-        if (locations)       store.setDriverLocations(locations);
-        if (profiles)        store.setProfiles(profiles);
-        if (fleetNodes)      store.setFleetNodes(fleetNodes);
-        if (events)          store.setDashboardEvents(events);
-        if (settings)        store.setSettings(settings);
+        if (tasksWithAssign)    store.setTasksWithAssignments(tasksWithAssign);
+        if (tasks)              store.setTasks(tasks);
+        if (drivers)            store.setDrivers(drivers);
+        if (vehicles)           store.setVehicles(vehicles);
+        if (assignments)        store.setAssignments(assignments);
+        if (locations)          store.setDriverLocations(locations);
+        if (profiles)           store.setProfiles(profiles);
+        if (fleetNodes)         store.setFleetNodes(fleetNodes);
+        if (events)             store.setDashboardEvents(events);
+        if (settings)           store.setSettings(settings);
+        if (pairingCodes)       store.setPairingCodes(pairingCodes);
+        if (tenantsWithFleets)  store.setTenantsWithFleets(tenantsWithFleets);
       } catch (e) {
         console.error('[AP3X] bootstrap failed:', e);
         store.addAlert({ type: 'danger', title: 'Load Error', message: 'Failed to load data from Supabase.' });
@@ -130,7 +140,23 @@ export function useAP3XData() {
         })
         .subscribe();
 
-      channelsRef.current = [tasksCh, driversCh, assignmentsCh, locationsCh, eventsCh];
+      // ── pairing_codes (federation sync) ──
+      const pairingCh = client
+        .channel('ap3x:pairing_codes')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'pairing_codes' }, (p) => {
+          if (p.eventType === 'DELETE') {
+            store.removePairingCode(p.old.id as string);
+          } else {
+            store.upsertPairingCode(p.new as PairingCode);
+            // When a code is used (Fleet Control OS paired), refresh the full tenant list
+            if ((p.new as PairingCode).status === 'used') {
+              fetchTenantsWithFleets().then((t) => { if (t) store.setTenantsWithFleets(t); });
+            }
+          }
+        })
+        .subscribe();
+
+      channelsRef.current = [tasksCh, driversCh, assignmentsCh, locationsCh, eventsCh, pairingCh];
     }
 
     bootstrap().then(() => subscribeRealtime());

@@ -8,6 +8,9 @@
  *   profiles · tasks · drivers · vehicles
  *   job_assignments · driver_locations
  *   fleet_nodes · dashboard_events · settings
+ *
+ * Federation tables (managed by federationService):
+ *   pairing_codes · tenants · fleet_entities
  */
 
 import { create } from 'zustand';
@@ -16,6 +19,7 @@ import type {
   DriverLocation, TaskWithAssignment,
   FleetNode, DashboardEvent, SystemSetting,
 } from '@/types/db';
+import type { PairingCode, TenantWithFleets } from '@/types/federation';
 
 export interface AppAlert {
   id: string;
@@ -39,6 +43,10 @@ interface AP3XStore {
   dashboardEvents:      DashboardEvent[];
   settings:             SystemSetting[];
 
+  // ── Federation mirrors ──
+  pairingCodes:         PairingCode[];
+  tenantsWithFleets:    TenantWithFleets[];
+
   // ── UI state ──
   isLoading:           boolean;
   isConfigured:        boolean;
@@ -47,20 +55,22 @@ interface AP3XStore {
   alerts:              AppAlert[];
 
   // ── Bulk setters (from initial load) ──
-  setTasks:                (t: Task[])             => void;
+  setTasks:                (t: Task[])               => void;
   setTasksWithAssignments: (t: TaskWithAssignment[]) => void;
-  setDrivers:              (d: Driver[])            => void;
-  setVehicles:             (v: Vehicle[])           => void;
-  setAssignments:          (a: JobAssignment[])     => void;
-  setDriverLocations:      (l: DriverLocation[])    => void;
-  setProfiles:             (p: Profile[])           => void;
-  setFleetNodes:           (n: FleetNode[])         => void;
-  setDashboardEvents:      (e: DashboardEvent[])    => void;
-  setSettings:             (s: SystemSetting[])     => void;
-  setLoading:              (b: boolean)             => void;
-  setConfigured:           (b: boolean)             => void;
-  setSidebarCollapsed:     (b: boolean)             => void;
-  setMobileSidebarOpen:    (b: boolean)             => void;
+  setDrivers:              (d: Driver[])              => void;
+  setVehicles:             (v: Vehicle[])             => void;
+  setAssignments:          (a: JobAssignment[])       => void;
+  setDriverLocations:      (l: DriverLocation[])      => void;
+  setProfiles:             (p: Profile[])             => void;
+  setFleetNodes:           (n: FleetNode[])           => void;
+  setDashboardEvents:      (e: DashboardEvent[])      => void;
+  setSettings:             (s: SystemSetting[])       => void;
+  setPairingCodes:         (c: PairingCode[])         => void;
+  setTenantsWithFleets:    (t: TenantWithFleets[])    => void;
+  setLoading:              (b: boolean)               => void;
+  setConfigured:           (b: boolean)               => void;
+  setSidebarCollapsed:     (b: boolean)               => void;
+  setMobileSidebarOpen:    (b: boolean)               => void;
 
   // ── Realtime patch helpers ──
   upsertTask:             (task: Task)              => void;
@@ -70,6 +80,10 @@ interface AP3XStore {
   removeAssignment:       (id: string)              => void;
   upsertDriverLocation:   (loc: DriverLocation)     => void;
   prependDashboardEvent:  (e: DashboardEvent)       => void;
+
+  // ── Federation realtime helpers ──
+  upsertPairingCode:      (code: PairingCode)       => void;
+  removePairingCode:      (id: string)              => void;
 
   // ── Alerts (transient UI — not stored in Supabase) ──
   addAlert:     (a: Omit<AppAlert, 'id' | 'dismissed' | 'createdAt'>) => void;
@@ -88,6 +102,8 @@ export const useAP3XStore = create<AP3XStore>((set) => ({
   fleetNodes:           [],
   dashboardEvents:      [],
   settings:             [],
+  pairingCodes:         [],
+  tenantsWithFleets:    [],
 
   isLoading:         true,
   isConfigured:      false,
@@ -105,6 +121,8 @@ export const useAP3XStore = create<AP3XStore>((set) => ({
   setFleetNodes:           (fleetNodes)           => set({ fleetNodes }),
   setDashboardEvents:      (dashboardEvents)      => set({ dashboardEvents }),
   setSettings:             (settings)             => set({ settings }),
+  setPairingCodes:         (pairingCodes)         => set({ pairingCodes }),
+  setTenantsWithFleets:    (tenantsWithFleets)    => set({ tenantsWithFleets }),
   setLoading:              (isLoading)            => set({ isLoading }),
   setConfigured:           (isConfigured)         => set({ isConfigured }),
   setSidebarCollapsed:     (sidebarCollapsed)     => set({ sidebarCollapsed }),
@@ -142,7 +160,6 @@ export const useAP3XStore = create<AP3XStore>((set) => ({
     const assignments = exists
       ? s.assignments.map((x) => x.id === a.id ? a : x)
       : [a, ...s.assignments];
-    // Patch tasksWithAssignments to reflect new assignment
     const tasksWithAssignments = s.tasksWithAssignments.map((t) => {
       if (t.id !== a.task_id) return t;
       const driver  = s.drivers.find((d) => d.id === a.driver_id)  ?? null;
@@ -164,7 +181,6 @@ export const useAP3XStore = create<AP3XStore>((set) => ({
   }),
 
   upsertDriverLocation: (loc) => set((s) => {
-    // Keep only latest per driver — drop old, prepend new
     const filtered = s.driverLocations.filter((l) => l.driver_id !== loc.driver_id);
     return { driverLocations: [loc, ...filtered].slice(0, 200) };
   }),
@@ -173,12 +189,27 @@ export const useAP3XStore = create<AP3XStore>((set) => ({
     dashboardEvents: [e, ...s.dashboardEvents].slice(0, 200),
   })),
 
+  // ── Federation realtime helpers ──
+
+  upsertPairingCode: (code) => set((s) => {
+    const exists = s.pairingCodes.some((c) => c.id === code.id);
+    return {
+      pairingCodes: exists
+        ? s.pairingCodes.map((c) => c.id === code.id ? code : c)
+        : [code, ...s.pairingCodes],
+    };
+  }),
+
+  removePairingCode: (id) => set((s) => ({
+    pairingCodes: s.pairingCodes.filter((c) => c.id !== id),
+  })),
+
   addAlert: (alert) => set((s) => ({
     alerts: [{
       ...alert,
-      id:         `alert-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-      dismissed:  false,
-      createdAt:  Date.now(),
+      id:        `alert-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      dismissed: false,
+      createdAt: Date.now(),
     }, ...s.alerts].slice(0, 50),
   })),
 
