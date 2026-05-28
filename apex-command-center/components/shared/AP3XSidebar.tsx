@@ -7,11 +7,12 @@ import { useAP3XStore } from '@/store/ap3x-store';
 import {
   LayoutDashboard, ClipboardList, Users, Truck,
   Activity, Settings, ChevronLeft, ChevronRight, X,
-  Shield, Zap,
+  Shield, Zap, Building2, Globe,
 } from 'lucide-react';
 
 const NAV = [
   { label: 'Overview',   href: '/dashboard',    icon: LayoutDashboard },
+  { label: 'Tenants',    href: '/tenants',       icon: Building2,  badge: 'federation' },
   { label: 'Tasks',      href: '/tasks',         icon: ClipboardList },
   { label: 'Fleet',      href: '/fleet',         icon: Truck },
   { label: 'Drivers',    href: '/drivers',       icon: Users },
@@ -58,10 +59,9 @@ export function AP3XSidebar() {
         <div className="mx-3 my-3 rounded-lg bg-apex-bg border border-apex-border/50 px-3 py-2 space-y-1.5 flex-shrink-0">
           <div className="flex items-center justify-between text-[10px] text-apex-textMuted">
             <span className="flex items-center gap-1">
-              <span className="h-1.5 w-1.5 rounded-full bg-apex-success animate-pulse" />
-              System Online
+              <Globe size={9} className="text-apex-accent" /> Federation
             </span>
-            <span className="font-mono text-apex-success">{onlineDrivers} drivers</span>
+            <span className="font-mono text-apex-success">{onlineDrivers} drivers live</span>
           </div>
           <div className="flex items-center justify-between text-[10px] text-apex-textMuted">
             <span className="flex items-center gap-1"><Zap size={9} /> Pending Tasks</span>
@@ -96,7 +96,13 @@ export function AP3XSidebar() {
               title={(!mobile && sidebarCollapsed) ? item.label : undefined}
             >
               <Icon size={16} className={cn('flex-shrink-0', isActive ? 'text-apex-accent' : '')} />
-              {(mobile || !sidebarCollapsed) && <span className="truncate">{item.label}</span>}
+              {(mobile || !sidebarCollapsed) && (
+                <span className="flex-1 truncate">{item.label}</span>
+              )}
+              {/* Federation badge */}
+              {(mobile || !sidebarCollapsed) && item.badge === 'federation' && (
+                <span className="ml-auto rounded-full bg-apex-accent/20 px-1.5 py-0.5 text-[9px] font-bold text-apex-accent">NEW</span>
+              )}
             </Link>
           );
         })}
