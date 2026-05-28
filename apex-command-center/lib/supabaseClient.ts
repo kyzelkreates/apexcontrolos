@@ -1,50 +1,37 @@
 /**
- * APEX COMMAND CENTER OS
- * lib/supabaseClient.ts — Supabase Client Factory
+ * AP3X CONTROL DASHBOARD
+ * lib/supabaseClient.ts
  *
- * Reads credentials from Storage.Config (set via Settings → Supabase panel).
- * Returns null when credentials are not configured — caller must check.
+ * Single Supabase client. Reads URL + anon key from env vars.
+ * Returns null if not configured — callers must guard.
  *
- * RULES:
- *   - Never hardcode credentials
- *   - Never throw — always return null on missing/invalid config
- *   - Singleton per URL so we don't create duplicate connections
+ * CONTRACT: Supabase is the ONLY source of truth. No mocks. No fallbacks.
  */
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import Storage from '@/storage/storage';
 
 let _client: SupabaseClient | null = null;
-let _lastUrl = '';
-let _lastKey = '';
 
 export function getSupabaseClient(): SupabaseClient | null {
   if (typeof window === 'undefined') return null; // SSR guard
 
-  const config = Storage.Config.get() as Record<string, unknown>;
-  const url  = (config.supabaseUrl  as string | undefined)?.trim() ?? '';
-  const key  = (config.supabaseAnonKey as string | undefined)?.trim() ?? '';
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() ?? '';
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim() ?? '';
 
   if (!url || !key) return null;
-
-  // Return cached client if credentials haven't changed
-  if (_client && url === _lastUrl && key === _lastKey) return _client;
+  if (_client) return _client;
 
   try {
-    _client  = createClient(url, key, {
-      auth:     { persistSession: false },
+    _client = createClient(url, key, {
+      auth: { persistSession: true },
       realtime: { params: { eventsPerSecond: 10 } },
     });
-    _lastUrl = url;
-    _lastKey = key;
     return _client;
   } catch {
-    _client = null;
     return null;
   }
 }
 
-/** True when Supabase credentials are stored and a client can be built */
 export function isSupabaseConfigured(): boolean {
   return getSupabaseClient() !== null;
 }
