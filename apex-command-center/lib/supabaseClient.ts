@@ -13,7 +13,8 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 let _client: SupabaseClient | null = null;
 
 export function getSupabaseClient(): SupabaseClient | null {
-  if (typeof window === 'undefined') return null; // SSR guard
+  // SSR guard — browser-only singleton
+  if (typeof window === 'undefined') return null;
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() ?? '';
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim() ?? '';
@@ -32,6 +33,17 @@ export function getSupabaseClient(): SupabaseClient | null {
   }
 }
 
+/**
+ * SSR-safe configuration check.
+ * On the server we check env vars directly (no window needed).
+ * On the client we also verify the client can be created.
+ */
 export function isSupabaseConfigured(): boolean {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() ?? '';
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim() ?? '';
+  if (!url || !key) return false;
+  // On server, env vars being present is enough
+  if (typeof window === 'undefined') return true;
+  // On client, try to get/create the actual client
   return getSupabaseClient() !== null;
 }
