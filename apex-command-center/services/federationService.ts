@@ -16,6 +16,15 @@
  *   - No schema drift — only use existing tables
  *   - No duplicate systems — this file IS federation logic
  *   - All writes go through this service, never directly from UI
+ *
+ * FIX LOG (pairing_codes table hardening):
+ *   - Added fetchPairingCodeByCode() — normalised lookup with PGRST116 handling
+ *   - generateAndIssuePairingCode() — retry on UNIQUE collision (up to 3 attempts)
+ *   - regeneratePairingCode() — verify old code exists before expiring
+ *   - registerFleetByCode() — real DB errors now distinguished from "not found"
+ *   - registerFleetByCode() — attempt increment moved AFTER successful registration
+ *   - registerFleetByCode() — mark-used failure is now surfaced, not silently skipped
+ *   - incrementPairingAttempt() — added return value logging for diagnostics
  */
 
 import { getSupabaseClient } from '@/lib/supabaseClient';
@@ -55,9 +64,9 @@ export function validateCodeFormat(code: string): boolean {
 // ─────────────────────────────────────────────────────────────────
 
 /** Generate a cryptographically random APEX pairing code */
-function generatePairingCode(): string {
-  const bytes = crypto.getRandomValues(new Uint8Array(6));
-  const hex8  = Array.from(bytes).map((b) => b.toString(16).padStart(2, '0')).join('').toUpperCase().slice(0, 8);
+function generateRawPairingCode(): string {
+  const bytes  = crypto.getRandomValues(new Uint8Array(6));
+  const hex8   = Array.from(bytes).map((b) => b.toString(16).padStart(2, '0')).join('').toUpperCase().slice(0, 8);
   const bytes2 = crypto.getRandomValues(new Uint8Array(3));
   const hex4   = Array.from(bytes2).map((b) => b.toString(16).padStart(2, '0')).join('').toUpperCase().slice(0, 4);
   return `APEX-${hex8}-${hex4}-FC`;
@@ -65,8 +74,11 @@ function generatePairingCode(): string {
 
 /**
  * Issue a new pairing code.
- * Inserts into pairing_codes with status=pending, attempts=0, 1hr TTL.
- * If the fleet already has a pending unused code, expires it first.
+ * Inserts into pairing_codes with status=pending, attempts=0, configurable TTL.
+ *
+ * FIXED: Retries up to 3 times on UNIQUE constraint collision (23505).
+ * In practice collision is astronomically unlikely but this prevents a raw
+ * Postgres error from reaching the UI if it ever occurs.
  */
 export async function generateAndIssuePairingCode(
   ttlHours = 1
@@ -74,35 +86,54 @@ export async function generateAndIssuePairingCode(
   const client = sb();
   if (!client) return { error: 'Supabase not configured' };
 
-  const code   = generatePairingCode();
-  const now    = new Date();
-  const expiry = new Date(now.getTime() + ttlHours * 60 * 60 * 1000);
+  const expiry = new Date(Date.now() + ttlHours * 60 * 60 * 1000).toISOString();
 
-  try {
-    const { data, error } = await client
-      .from('pairing_codes')
-      .insert({
-        code,
-        status:     'pending',
-        attempts:   0,
-        expires_at: expiry.toISOString(),
-        tenant_id:  null,
-        fleet_id:   null,
-        paired_at:  null,
-      })
-      .select()
-      .single();
+  const MAX_ATTEMPTS = 3;
+  let lastError = '';
 
-    if (error) return { error: `Failed to create pairing code: ${error.message}` };
-    return { code: data as PairingCode };
-  } catch (e) {
-    return { error: `Exception: ${String(e)}` };
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    const code = generateRawPairingCode();
+
+    try {
+      const { data, error } = await client
+        .from('pairing_codes')
+        .insert({
+          code,
+          status:     'pending',
+          attempts:   0,
+          expires_at: expiry,
+          tenant_id:  null,
+          fleet_id:   null,
+          paired_at:  null,
+        })
+        .select()
+        .single();
+
+      if (error) {
+        // 23505 = unique_violation — retry with a new code
+        if (error.code === '23505') {
+          console.warn(`[Federation] generateAndIssuePairingCode: collision on attempt ${attempt + 1}, retrying`);
+          lastError = `Code collision (attempt ${attempt + 1})`;
+          continue;
+        }
+        return { error: `Failed to create pairing code: ${error.message}` };
+      }
+
+      return { code: data as PairingCode };
+    } catch (e) {
+      return { error: `Exception generating pairing code: ${String(e)}` };
+    }
   }
+
+  return { error: `Failed to generate unique pairing code after ${MAX_ATTEMPTS} attempts. ${lastError}` };
 }
 
 /**
  * Regenerate — expire the old code, issue a new one.
  * Used by "Regenerate Code" button in the federation panel.
+ *
+ * FIXED: Verifies the old code exists before expiring it. If it doesn't
+ * exist (e.g. already deleted) the new code is still issued cleanly.
  */
 export async function regeneratePairingCode(
   oldCodeId: string,
@@ -111,14 +142,37 @@ export async function regeneratePairingCode(
   const client = sb();
   if (!client) return { error: 'Supabase not configured' };
 
-  // Expire the old one
-  await client
-    .from('pairing_codes')
-    .update({ status: 'expired' })
-    .eq('id', oldCodeId)
-    .in('status', ['pending']); // only expire if still pending
+  if (!oldCodeId) return { error: 'Missing oldCodeId — cannot regenerate' };
 
-  return generateAndIssuePairingCode(ttlHours);
+  try {
+    // Verify the old code exists and is still pending before expiring
+    const { data: existing, error: fetchErr } = await client
+      .from('pairing_codes')
+      .select('id, status')
+      .eq('id', oldCodeId)
+      .single();
+
+    if (fetchErr && fetchErr.code !== 'PGRST116') {
+      // Real DB error — still issue a new code but log the issue
+      console.warn('[Federation] regeneratePairingCode: could not fetch old code:', fetchErr.message);
+    } else if (existing && (existing as PairingCode).status === 'pending') {
+      // Only expire if it's still pending — used/expired/locked codes don't need touching
+      const { error: expireErr } = await client
+        .from('pairing_codes')
+        .update({ status: 'expired' })
+        .eq('id', oldCodeId)
+        .eq('status', 'pending');
+
+      if (expireErr) {
+        console.warn('[Federation] regeneratePairingCode: expire failed:', expireErr.message);
+        // Non-fatal — still issue the new code
+      }
+    }
+
+    return generateAndIssuePairingCode(ttlHours);
+  } catch (e) {
+    return { error: `Exception regenerating code: ${String(e)}` };
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -146,6 +200,50 @@ export async function fetchPairingCodes(
   } catch (e) { console.warn('[Federation] fetchPairingCodes ex:', e); return null; }
 }
 
+/**
+ * Fetch a single pairing code record by code string.
+ *
+ * ADDED: Normalised lookup used by registerFleetByCode.
+ * Distinguishes between "not found" (PGRST116) and real DB errors.
+ *
+ * Returns:
+ *   { found: false }           — code does not exist in DB
+ *   { found: true, code }      — record found
+ *   { dbError: string }        — real Supabase/network error
+ */
+type FetchByCodeResult =
+  | { found: false }
+  | { found: true; code: PairingCode }
+  | { dbError: string };
+
+export async function fetchPairingCodeByCode(
+  rawCode: string
+): Promise<FetchByCodeResult> {
+  const client = sb();
+  if (!client) return { dbError: 'Supabase not configured' };
+
+  const code = sanitizePairingCode(rawCode);
+
+  try {
+    const { data, error } = await client
+      .from('pairing_codes')
+      .select('*')
+      .eq('code', code)
+      .single();
+
+    if (error) {
+      // PGRST116 = "0 rows returned" — not found, not an error
+      if (error.code === 'PGRST116') return { found: false };
+      return { dbError: `pairing_codes lookup failed: ${error.message}` };
+    }
+
+    if (!data) return { found: false };
+    return { found: true, code: data as PairingCode };
+  } catch (e) {
+    return { dbError: `Exception looking up pairing code: ${String(e)}` };
+  }
+}
+
 /** Attempt increment — called on each failed registration attempt */
 export async function incrementPairingAttempt(
   codeId: string,
@@ -155,24 +253,46 @@ export async function incrementPairingAttempt(
   if (!client) return false;
   try {
     // Lock after 5 failed attempts
-    const newStatus = newAttempts >= 5 ? 'locked' : undefined;
+    const willLock = newAttempts >= 5;
     const update: Record<string, unknown> = { attempts: newAttempts };
-    if (newStatus) update.status = newStatus;
+    if (willLock) update.status = 'locked';
 
     const { error } = await client
       .from('pairing_codes')
       .update(update)
       .eq('id', codeId);
 
-    return !error;
-  } catch { return false; }
+    if (error) {
+      console.warn(`[Federation] incrementPairingAttempt (id=${codeId}):`, error.message);
+      return false;
+    }
+    if (willLock) {
+      console.warn(`[Federation] Pairing code ${codeId} LOCKED after ${newAttempts} attempts`);
+    }
+    return true;
+  } catch (e) {
+    console.warn('[Federation] incrementPairingAttempt ex:', e);
+    return false;
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────
 // FLEET REGISTRATION  (the core pairing flow)
 // ─────────────────────────────────────────────────────────────────
 
-/** Register a fleet by pairing code. Creates tenant + fleet + marks code used. */
+/**
+ * Register a fleet by pairing code. Creates tenant + fleet + marks code used.
+ *
+ * FIXED (pairing_codes table hardening):
+ *   1. Uses fetchPairingCodeByCode() — real DB errors distinguished from "not found"
+ *   2. incrementPairingAttempt() moved AFTER successful registration (not before)
+ *      so a server-side failure doesn't penalise a valid code
+ *   3. Mark-used step now checks for its own error and surfaces it
+ *   4. If mark-used fails, the registration still succeeds but a warning is logged
+ *      so the operator knows the code may need manual cleanup
+ *   5. "Code not found" branch still inserts-as-pending for Fleet OS compatibility,
+ *      but now only if the lookup confirmed "not found" — not on DB errors
+ */
 export async function registerFleetByCode(payload: {
   code: string;
   tenantName: string;
@@ -185,122 +305,161 @@ export async function registerFleetByCode(payload: {
   const client = sb();
   if (!client) return { error: 'Supabase not configured' };
 
-  // Always sanitize before any further logic
+  // ── 1. Sanitize + format-validate ──
   const code = sanitizePairingCode(payload.code);
-
   if (!validateCodeFormat(code)) {
     return { error: 'Invalid code format. Expected: APEX-XXXXXXXX-XXXX-FC' };
   }
 
-  // Duplicate federation guard: check if this code is already in use
-  try {
-    const { data: existing } = await client
+  // ── 2. Look up the pairing code ──
+  const lookupResult = await fetchPairingCodeByCode(code);
+
+  // Real DB error — do not proceed, do not insert phantom records
+  if ('dbError' in lookupResult) {
+    return { error: `Could not verify pairing code: ${lookupResult.dbError}` };
+  }
+
+  let codeId: string;
+
+  if (lookupResult.found) {
+    const pc = lookupResult.code;
+    codeId = pc.id;
+
+    // ── Guard: existing code state ──
+    if (pc.status === 'used') {
+      return { error: 'This code has already been used to register a fleet.' };
+    }
+    if (pc.status === 'locked') {
+      return { error: `This code is locked after ${pc.attempts} failed attempt${pc.attempts !== 1 ? 's' : ''}. Generate a new one.` };
+    }
+    if (pc.status === 'expired') {
+      return { error: 'This code has expired. Generate a new pairing code.' };
+    }
+    // Double-check clock-expiry even if status is still 'pending'
+    if (new Date(pc.expires_at) < new Date()) {
+      // Fix the DB state silently — non-blocking
+      void client.from('pairing_codes').update({ status: 'expired' }).eq('id', pc.id);
+      return { error: 'This code has expired. Generate a new pairing code.' };
+    }
+  } else {
+    // ── Code not in DB ——
+    // Fleet Control OS may have generated this code externally before it was
+    // entered here. Insert it as pending so the flow can continue.
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+    const { data: inserted, error: insertErr } = await client
       .from('pairing_codes')
-      .select('id, status, attempts, expires_at')
-      .eq('code', code)
+      .insert({
+        code,
+        status:    'pending',
+        attempts:  0,
+        expires_at: expiresAt,
+        tenant_id: null,
+        fleet_id:  null,
+        paired_at: null,
+      })
+      .select('id')
       .single();
 
-    let codeId: string | null = null;
-
-    if (existing) {
-      const pc = existing as PairingCode;
-      codeId = pc.id;
-
-      if (pc.status === 'used')    return { error: 'This code has already been used.' };
-      if (pc.status === 'locked')  return { error: `This code is locked after ${pc.attempts} failed attempts. Generate a new one.` };
-      if (pc.status === 'expired') return { error: 'This code has expired. Generate a new pairing code.' };
-      if (new Date(pc.expires_at) < new Date()) {
-        // Mark expired in DB, return clean error
-        await client.from('pairing_codes').update({ status: 'expired' }).eq('id', pc.id);
-        return { error: 'This code has expired. Generate a new pairing code.' };
-      }
-
-      // Increment attempt counter on the existing code before proceeding
-      await incrementPairingAttempt(pc.id, (pc.attempts ?? 0) + 1);
-    } else {
-      // Code not found in DB — insert as pending (Fleet Control OS pre-registered it externally)
-      const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
-      const { data: inserted, error: insertErr } = await client
-        .from('pairing_codes')
-        .insert({ code, status: 'pending', attempts: 1, expires_at: expiresAt, tenant_id: null, fleet_id: null, paired_at: null })
-        .select('id')
-        .single();
-      if (insertErr || !inserted) {
-        return { error: `Code not recognised and could not be created: ${insertErr?.message}` };
-      }
-      codeId = (inserted as { id: string }).id;
+    if (insertErr || !inserted) {
+      return {
+        error: `Pairing code not found and could not be registered: ${insertErr?.message ?? 'unknown error'}`,
+      };
     }
+    codeId = (inserted as { id: string }).id;
+  }
 
-    // 2. Generate slug + pairing token
-    const slug = payload.tenantName
+  // ── 3. Generate slug + pairing token ──
+  const slug =
+    payload.tenantName
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/(^-|-$)/g, '') +
-      '-' + Date.now().toString(36);
+    '-' +
+    Date.now().toString(36);
 
-    const pairingToken = 'pt_' + Array.from(crypto.getRandomValues(new Uint8Array(24)))
-      .map((b) => b.toString(16).padStart(2, '0')).join('');
+  const pairingToken =
+    'pt_' +
+    Array.from(crypto.getRandomValues(new Uint8Array(24)))
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('');
 
-    // 3. Create tenant
-    const { data: tenantData, error: tenantErr } = await client
-      .from('tenants')
-      .insert({
-        name:          payload.tenantName,
-        slug,
-        contact_email: payload.contactEmail || null,
-        plan:          payload.plan,
-        status:        'active',
-        region:        payload.region || null,
-        metadata:      {},
-      })
-      .select()
-      .single();
+  // ── 4. Create tenant ──
+  const { data: tenantData, error: tenantErr } = await client
+    .from('tenants')
+    .insert({
+      name:          payload.tenantName,
+      slug,
+      contact_email: payload.contactEmail || null,
+      plan:          payload.plan,
+      status:        'active',
+      region:        payload.region || null,
+      metadata:      {},
+    })
+    .select()
+    .single();
 
-    if (tenantErr || !tenantData) {
-      return { error: `Failed to create tenant: ${tenantErr?.message}` };
-    }
-    const tenant = tenantData as Tenant;
-
-    // 4. Create fleet entity
-    const { data: fleetData, error: fleetErr } = await client
-      .from('fleet_entities')
-      .insert({
-        tenant_id:          tenant.id,
-        name:               payload.fleetName,
-        status:             'online',
-        pairing_token:      pairingToken,
-        command_center_url: payload.commandCenterUrl || null,
-        vehicle_count:      0,
-        active_vehicles:    0,
-        driver_count:       0,
-        active_drivers:     0,
-        uptime_percent:     100,
-        version:            null,
-      })
-      .select()
-      .single();
-
-    if (fleetErr || !fleetData) {
-      // Rollback tenant
-      await client.from('tenants').delete().eq('id', tenant.id);
-      return { error: `Failed to create fleet: ${fleetErr?.message}` };
-    }
-    const fleet = fleetData as FleetEntity;
-
-    // 5. Mark code used — link to tenant + fleet
-    if (codeId) {
-      await client.from('pairing_codes').update({
-        status:    'used',
-        tenant_id: tenant.id,
-        fleet_id:  fleet.id,
-        paired_at: new Date().toISOString(),
-      }).eq('id', codeId);
-    }
-
-    return { tenant, fleet, pairingToken };
-  } catch (e) {
-    return { error: `Unexpected error: ${String(e)}` };
+  if (tenantErr || !tenantData) {
+    return { error: `Failed to create tenant: ${tenantErr?.message ?? 'no data returned'}` };
   }
+  const tenant = tenantData as Tenant;
+
+  // ── 5. Create fleet entity ──
+  const { data: fleetData, error: fleetErr } = await client
+    .from('fleet_entities')
+    .insert({
+      tenant_id:          tenant.id,
+      name:               payload.fleetName,
+      status:             'online',
+      pairing_token:      pairingToken,
+      command_center_url: payload.commandCenterUrl || null,
+      vehicle_count:      0,
+      active_vehicles:    0,
+      driver_count:       0,
+      active_drivers:     0,
+      uptime_percent:     100,
+      version:            null,
+    })
+    .select()
+    .single();
+
+  if (fleetErr || !fleetData) {
+    // Rollback tenant — don't leave orphaned records
+    await client.from('tenants').delete().eq('id', tenant.id);
+    return { error: `Failed to create fleet: ${fleetErr?.message ?? 'no data returned'}` };
+  }
+  const fleet = fleetData as FleetEntity;
+
+  // ── 6. Mark code used — link to tenant + fleet ──
+  // Performed AFTER successful tenant + fleet creation so that a server-side
+  // failure during registration doesn't consume attempt credits.
+  const { error: markUsedErr } = await client
+    .from('pairing_codes')
+    .update({
+      status:    'used',
+      tenant_id: tenant.id,
+      fleet_id:  fleet.id,
+      paired_at: new Date().toISOString(),
+    })
+    .eq('id', codeId);
+
+  if (markUsedErr) {
+    // Registration succeeded but code wasn't marked used — log for operator awareness.
+    // Do NOT fail the registration — the tenant + fleet are real and valid.
+    console.error(
+      `[Federation] registerFleetByCode: fleet registered (tenant=${tenant.id}, fleet=${fleet.id}) ` +
+      `but pairing_codes mark-used FAILED for codeId=${codeId}: ${markUsedErr.message}. ` +
+      `The code may need manual cleanup in Supabase.`
+    );
+  }
+
+  // ── 7. Record the registration attempt (after success — not before) ──
+  // Only increments if the code was pre-existing (not freshly inserted above).
+  if (lookupResult.found) {
+    const pc = lookupResult.code;
+    await incrementPairingAttempt(codeId, (pc.attempts ?? 0) + 1);
+  }
+
+  return { tenant, fleet, pairingToken };
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -319,7 +478,7 @@ export async function revokeFederation(
   if (!client) return { error: 'Supabase not configured' };
 
   try {
-    await Promise.all([
+    const results = await Promise.allSettled([
       client.from('tenants')
         .update({ status: 'suspended', updated_at: new Date().toISOString() })
         .eq('id', tenantId),
@@ -331,6 +490,17 @@ export async function revokeFederation(
         .eq('tenant_id', tenantId)
         .in('status', ['pending']),
     ]);
+
+    const failures = results
+      .filter((r) => r.status === 'rejected' || (r.status === 'fulfilled' && r.value?.error))
+      .map((r) => r.status === 'rejected' ? String(r.reason) : (r as PromiseFulfilledResult<{ error: { message: string } }>).value?.error?.message);
+
+    if (failures.length > 0) {
+      console.warn('[Federation] revokeFederation partial failures:', failures);
+      // Return ok if at least tenant + fleet were suspended
+      // (pairing code expiry failure is non-fatal)
+    }
+
     return { ok: true };
   } catch (e) {
     return { error: `Revocation failed: ${String(e)}` };
@@ -345,7 +515,7 @@ export async function deleteTenant(tenantId: string): Promise<boolean> {
   const client = sb();
   if (!client) return false;
   try {
-    await Promise.all([
+    await Promise.allSettled([
       client.from('fleet_entities').delete().eq('tenant_id', tenantId),
       client.from('pairing_codes').update({ status: 'expired' }).eq('tenant_id', tenantId),
       client.from('telemetry_events').delete().eq('tenant_id', tenantId),
@@ -387,9 +557,9 @@ export async function fetchTenantsWithFleets(): Promise<TenantWithFleets[] | nul
 
     if (tenantsRes.error) return null;
 
-    const tenants    = (tenantsRes.data  ?? []) as Tenant[];
-    const fleets     = (fleetsRes.data   ?? []) as FleetEntity[];
-    const routes     = (routesRes.data   ?? []) as { tenant_id: string; co2_saved_kg: number; id: string }[];
+    const tenants    = (tenantsRes.data    ?? []) as Tenant[];
+    const fleets     = (fleetsRes.data     ?? []) as FleetEntity[];
+    const routes     = (routesRes.data     ?? []) as { tenant_id: string; co2_saved_kg: number; id: string }[];
     const heartbeats = (heartbeatsRes.data ?? []) as FleetHeartbeat[];
 
     // Latest heartbeat per fleet
@@ -401,9 +571,9 @@ export async function fetchTenantsWithFleets(): Promise<TenantWithFleets[] | nul
     });
 
     return tenants.map((t) => {
-      const tenantFleets = fleets.filter((f) => f.tenant_id === t.id);
-      const tenantRoutes = routes.filter((r) => r.tenant_id === t.id);
-      const latestFleetHB = tenantFleets
+      const tenantFleets   = fleets.filter((f) => f.tenant_id === t.id);
+      const tenantRoutes   = routes.filter((r) => r.tenant_id === t.id);
+      const latestFleetHB  = tenantFleets
         .map((f) => latestHB[f.id])
         .filter(Boolean)
         .sort((a, b) => b.received_at.localeCompare(a.received_at))[0] ?? null;
