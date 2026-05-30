@@ -4,13 +4,16 @@
  * Loads all permitted tables from Supabase on mount.
  * Subscribes to realtime on:
  *   tasks · drivers · job_assignments · driver_locations · dashboard_events
- *   pairing_codes  (federation sync)
+ *   pairing_codes      (federation sync)
+ *   telemetry_events   (federation event processor — INSERT only)
  *
  * Rules:
  *   - No mock data
  *   - No IndexedDB or localStorage fallbacks
  *   - Supabase ALWAYS overwrites local state
  *   - UI never pushes state into Supabase (except via explicit service calls)
+ *   - telemetry_events subscription is listen-only — all processing delegated
+ *     to federationEventProcessor (non-blocking async queue)
  */
 
 'use client';
@@ -25,13 +28,14 @@ import {
 import {
   fetchPairingCodes, fetchTenantsWithFleets,
 } from '@/services/federationService';
+import { handleFederationEvent } from '@/services/federationEventProcessor';
 import type { Task, Driver, DriverLocation, JobAssignment, DashboardEvent } from '@/types/db';
 import type { PairingCode } from '@/types/federation';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 
 export function useAP3XData() {
   const store = useAP3XStore();
-  const channelsRef    = useRef<RealtimeChannel[]>([]);
+  const channelsRef     = useRef<RealtimeChannel[]>([]);
   const bootstrappedRef = useRef(false);
 
   useEffect(() => {
@@ -148,7 +152,7 @@ export function useAP3XData() {
             store.removePairingCode(p.old.id as string);
           } else {
             store.upsertPairingCode(p.new as PairingCode);
-            // When a code is used (Fleet Control OS paired), refresh the full tenant list
+            // When a code transitions to 'used' (Fleet OS paired), refresh the tenant list
             if ((p.new as PairingCode).status === 'used') {
               fetchTenantsWithFleets().then((t) => { if (t) store.setTenantsWithFleets(t); });
             }
@@ -156,7 +160,32 @@ export function useAP3XData() {
         })
         .subscribe();
 
-      channelsRef.current = [tasksCh, driversCh, assignmentsCh, locationsCh, eventsCh, pairingCh];
+      // ── telemetry_events — Federation Event Processor (INSERT only) ──
+      // Listen-only. Raw event is immediately handed off to handleFederationEvent
+      // which runs validation + dedup + async queue — never blocks this callback.
+      const telemetryCh = client
+        .channel('ap3x:telemetry_events')
+        .on(
+          'postgres_changes',
+          { event: 'INSERT', schema: 'public', table: 'telemetry_events' },
+          (p) => {
+            // Hand off immediately — non-blocking
+            handleFederationEvent(p.new);
+          }
+        )
+        .subscribe((status) => {
+          if (status === 'SUBSCRIBED') {
+            console.log('[AP3X] Federation realtime: telemetry_events SUBSCRIBED');
+          }
+          if (status === 'CHANNEL_ERROR') {
+            console.warn('[AP3X] Federation realtime: telemetry_events CHANNEL_ERROR');
+          }
+        });
+
+      channelsRef.current = [
+        tasksCh, driversCh, assignmentsCh, locationsCh,
+        eventsCh, pairingCh, telemetryCh,
+      ];
     }
 
     bootstrap().then(() => subscribeRealtime());
