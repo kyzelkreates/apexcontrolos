@@ -1,15 +1,27 @@
 /**
  * POST /api/route-complete
+ *
  * Records a completed route from a Fleet Control OS instance.
- * Computes and stores CO2/fuel savings.
+ * Part of the locked event pipeline:
+ *   Fleet OS → [this endpoint] → Supabase (route_metrics)
+ *
+ * VALIDATION:
+ *   - Auth via authenticateFleetRequest
+ *   - Body validated via validateRouteBody (required fields, numeric ranges)
+ *   - vehicleId + driverId are required (not silently defaulted)
+ *   - Derived values (co2_saved_kg, fuel_cost_saved_usd) computed only if not provided
+ *   - All numerics clamped to sane ranges (no negative distances, no > 100% savings, etc.)
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseServerClient } from '@/lib/supabaseServer';
-import { authenticateFleetRequest } from '@/lib/apiAuth';
+import {
+  authenticateFleetRequest,
+  validateRouteBody,
+} from '@/lib/apiAuth';
 
 const CORS = {
-  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Origin':  '*',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type, X-Tenant-Id, X-Fleet-Id, X-Apex-Key',
 };
@@ -19,54 +31,81 @@ export async function OPTIONS() {
 }
 
 export async function POST(req: NextRequest) {
+  const now = new Date().toISOString();
+
   try {
     const supabase = getSupabaseServerClient();
+
+    // ── 1. Authentication ──
     const auth = await authenticateFleetRequest(req, supabase);
     if (!auth.ok) {
-      return NextResponse.json({ ok: false, error: auth.error }, { status: auth.status, headers: CORS });
+      return NextResponse.json(
+        { ok: false, error: auth.error },
+        { status: auth.status, headers: CORS }
+      );
     }
 
-    const body = await req.json();
-    const now = new Date().toISOString();
-
-    // Compute derived values if not provided
-    const fuelSavedL         = Number(body.fuelSavedL ?? 0);
-    const co2SavedKg         = Number(body.co2SavedKg ?? (fuelSavedL * 2.68));
-    const fuelCostSavedUSD   = Number(body.fuelCostSavedUSD ?? (fuelSavedL * 1.35));
-    const routeId            = body.routeId ?? crypto.randomUUID();
-
-    const { error } = await supabase.from('route_metrics').insert({
-      tenant_id:                    auth.tenantId,
-      fleet_id:                     auth.fleetId,
-      vehicle_id:                   body.vehicleId,
-      driver_id:                    body.driverId,
-      route_id:                     routeId,
-      distance_km:                  Number(body.distanceKm ?? 0),
-      duration_min:                 Number(body.durationMin ?? 0),
-      fuel_saved_l:                 fuelSavedL,
-      co2_saved_kg:                 co2SavedKg,
-      fuel_cost_saved_usd:          fuelCostSavedUSD,
-      optimisation_saving_percent:  Number(body.optimisationSavingPercent ?? 0),
-      ai_optimised:                 Boolean(body.aiOptimised ?? false),
-      on_time_delivery:             Boolean(body.onTimeDelivery ?? false),
-      stops:                        Number(body.stops ?? 0),
-      completed_at:                 now,
-      created_at:                   now,
-    });
-
-    if (error) {
-      console.error('[route-complete] insert error:', error.message);
-      return NextResponse.json({ ok: false, error: error.message }, { status: 500, headers: CORS });
+    // ── 2. Parse body ──
+    let body: Record<string, unknown>;
+    try {
+      body = await req.json();
+    } catch {
+      return NextResponse.json(
+        { ok: false, error: 'Request body is not valid JSON' },
+        { status: 400, headers: CORS }
+      );
     }
 
-    return NextResponse.json({
-      ok: true,
-      routeId,
-      serverTime: Date.now(),
-      computed: { co2SavedKg, fuelCostSavedUSD, fuelSavedL },
-    }, { headers: CORS });
+    // ── 3. Validate + normalise ──
+    const validation = validateRouteBody(body);
+    if (!validation.ok) {
+      return NextResponse.json(
+        { ok: false, error: validation.reason },
+        { status: 422, headers: CORS }
+      );
+    }
+
+    const f = validation.fields;
+
+    // ── 4. Insert route metric ──
+    const { error: insertErr } = await supabase
+      .from('route_metrics')
+      .insert({
+        tenant_id:                   auth.tenantId,
+        fleet_id:                    auth.fleetId,
+        vehicle_id:                  f.vehicle_id,
+        driver_id:                   f.driver_id,
+        route_id:                    f.route_id,
+        distance_km:                 f.distance_km,
+        duration_min:                f.duration_min,
+        fuel_saved_l:                f.fuel_saved_l,
+        co2_saved_kg:                f.co2_saved_kg,
+        fuel_cost_saved_usd:         f.fuel_cost_saved_usd,
+        optimisation_saving_percent: f.optimisation_saving_percent,
+        ai_optimised:                f.ai_optimised,
+        on_time_delivery:            f.on_time_delivery,
+        stops:                       f.stops,
+        completed_at:                now,
+        created_at:                  now,
+      });
+
+    if (insertErr) {
+      console.error('[route-complete] insert error:', insertErr.message, 'code:', insertErr.code);
+      return NextResponse.json(
+        { ok: false, error: `Database write failed: ${insertErr.message}` },
+        { status: 500, headers: CORS }
+      );
+    }
+
+    return NextResponse.json(
+      { ok: true, routeId: f.route_id, serverTime: Date.now() },
+      { headers: CORS }
+    );
   } catch (e) {
-    console.error('[route-complete] error:', e);
-    return NextResponse.json({ ok: false, error: 'Server error' }, { status: 500, headers: CORS });
+    console.error('[route-complete] unhandled error:', e);
+    return NextResponse.json(
+      { ok: false, error: 'Internal server error' },
+      { status: 500, headers: CORS }
+    );
   }
 }
